@@ -60,8 +60,7 @@ pub enum Token {
     Identifier,
 
     #[regex(r"[ \t\n\f]+", logos::skip)]
-    #[error]
-    Error,
+    Whitespace,
 }
 
 pub struct Lexer<'a> {
@@ -80,7 +79,11 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        match self.inner.next() {
+            Some(Ok(token)) => Some(token),
+            Some(Err(_)) => self.next(),
+            None => None,
+        }
     }
 }
 
