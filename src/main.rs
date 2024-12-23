@@ -1,6 +1,9 @@
+mod ast;
 mod lexer;
+mod parser;
 
 use lexer::Lexer;
+use parser::Parser;
 
 fn main() {
     let example_code =
@@ -15,7 +18,12 @@ fn main() {
     "#;
 
     let lexer = Lexer::new(example_code);
-    for token in lexer {
-        println!("{:?}", token);
+    let tokens: Vec<_> = lexer.collect();
+    println!("Tokens: {:#?}", tokens);
+
+    let mut parser = Parser::new(tokens);
+    match parser.parse() {
+        Ok(program) => println!("AST: {:#?}", program),
+        Err(e) => eprintln!("Parse error: {}", e),
     }
 }
