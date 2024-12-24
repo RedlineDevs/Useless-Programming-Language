@@ -1,5 +1,5 @@
 use crate::ast::{ BinaryOp, Expression, Literal, Program, Statement };
-use crate::lexer::Token;
+use crate::lexer::{ Token, TokenKind };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -35,15 +35,15 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ParseError> {
-        match self.peek() {
-            Some(Token::Let) => self.parse_let_statement(),
-            Some(Token::Print) => self.parse_print_statement(),
-            Some(Token::If) => self.parse_if_statement(),
-            Some(Token::Loop) => self.parse_loop_statement(),
-            Some(Token::Save) => self.parse_save_statement(),
+        match self.peek().map(|t| &t.kind) {
+            Some(TokenKind::Let) => self.parse_let_statement(),
+            Some(TokenKind::Print) => self.parse_print_statement(),
+            Some(TokenKind::If) => self.parse_if_statement(),
+            Some(TokenKind::Loop) => self.parse_loop_statement(),
+            Some(TokenKind::Save) => self.parse_save_statement(),
             _ => {
                 let expr = self.parse_expression()?;
-                self.consume(Token::Semicolon)?;
+                self.consume(&TokenKind::Semicolon)?;
                 Ok(Statement::Expression(expr))
             }
         }
@@ -52,51 +52,55 @@ impl Parser {
     fn parse_let_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'let'
         let name = match self.advance() {
-            Some(Token::Identifier) => "temp".to_string(), // We'll improve this later
+            Some(token) if token.kind == TokenKind::Identifier => token.text,
             _ => {
                 return Err(ParseError::UnexpectedToken(self.previous().unwrap()));
             }
         };
 
-        self.consume(Token::Equals)?;
+        self.consume(&TokenKind::Equals)?;
         let value = self.parse_expression()?;
-        self.consume(Token::Semicolon)?;
+        self.consume(&TokenKind::Semicolon)?;
 
         Ok(Statement::Let { name, value })
     }
 
     fn parse_print_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'print'
-        self.consume(Token::LeftParen)?;
+        self.consume(&TokenKind::LeftParen)?;
         let value = self.parse_expression()?;
-        self.consume(Token::RightParen)?;
-        self.consume(Token::Semicolon)?;
+        self.consume(&TokenKind::RightParen)?;
+        self.consume(&TokenKind::Semicolon)?;
 
         Ok(Statement::Print { value })
     }
 
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
-        match self.peek() {
-            Some(Token::StringLiteral) => {
-                self.advance();
-                Ok(Expression::Literal(Literal::String("temp".to_string()))) // We'll improve this later
+        match self.peek().map(|t| &t.kind) {
+            Some(TokenKind::StringLiteral) => {
+                let token = self.advance().unwrap();
+                let content = token.text.trim_matches('"').to_string();
+                Ok(Expression::Literal(Literal::String(content)))
             }
-            Some(Token::NumberLiteral) => {
-                self.advance();
-                Ok(Expression::Literal(Literal::Number(42))) // We'll improve this later
+            Some(TokenKind::NumberLiteral) => {
+                let token = self.advance().unwrap();
+                let number = token.text
+                    .parse::<i64>()
+                    .map_err(|_| ParseError::InvalidNumberLiteral)?;
+                Ok(Expression::Literal(Literal::Number(number)))
             }
-            Some(Token::Add) | Some(Token::Multiply) => {
-                let op = match self.advance().unwrap() {
-                    Token::Add => BinaryOp::Add,
-                    Token::Multiply => BinaryOp::Multiply,
+            Some(TokenKind::Add) | Some(TokenKind::Multiply) => {
+                let op = match self.advance().unwrap().kind {
+                    TokenKind::Add => BinaryOp::Add,
+                    TokenKind::Multiply => BinaryOp::Multiply,
                     _ => unreachable!(),
                 };
 
-                self.consume(Token::LeftParen)?;
+                self.consume(&TokenKind::LeftParen)?;
                 let left = self.parse_expression()?;
-                self.consume(Token::Comma)?;
+                self.consume(&TokenKind::Comma)?;
                 let right = self.parse_expression()?;
-                self.consume(Token::RightParen)?;
+                self.consume(&TokenKind::RightParen)?;
 
                 Ok(Expression::BinaryOp {
                     op,
@@ -104,43 +108,58 @@ impl Parser {
                     right: Box::new(right),
                 })
             }
-            Some(Token::Identifier) => {
-                self.advance();
-                if self.peek() == Some(&Token::LeftParen) {
-                    self.parse_function_call("temp".to_string()) // We'll improve this later
+            Some(TokenKind::Identifier) => {
+                let token = self.advance().unwrap();
+                let name = token.text;
+                if self.peek().map(|t| &t.kind) == Some(&TokenKind::LeftParen) {
+                    self.parse_function_call(name)
                 } else {
-                    Ok(Expression::Identifier("temp".to_string())) // We'll improve this later
+                    Ok(Expression::Identifier(name))
                 }
             }
             _ =>
-                Err(ParseError::UnexpectedToken(self.peek().cloned().unwrap_or(Token::Whitespace))),
+                Err(
+                    ParseError::UnexpectedToken(
+                        self
+                            .peek()
+                            .cloned()
+                            .unwrap_or_else(|| Token::new(TokenKind::Whitespace, String::new()))
+                    )
+                ),
         }
     }
 
     fn parse_function_call(&mut self, name: String) -> Result<Expression, ParseError> {
-        self.consume(Token::LeftParen)?;
+        self.consume(&TokenKind::LeftParen)?;
         let mut arguments = Vec::new();
 
-        if self.peek() != Some(&Token::RightParen) {
+        if self.peek().map(|t| &t.kind) != Some(&TokenKind::RightParen) {
             loop {
                 arguments.push(self.parse_expression()?);
-                if self.peek() != Some(&Token::Comma) {
+                if self.peek().map(|t| &t.kind) != Some(&TokenKind::Comma) {
                     break;
                 }
                 self.advance(); // consume comma
             }
         }
 
-        self.consume(Token::RightParen)?;
+        self.consume(&TokenKind::RightParen)?;
         Ok(Expression::FunctionCall { name, arguments })
     }
 
-    fn consume(&mut self, expected: Token) -> Result<(), ParseError> {
-        if self.peek() == Some(&expected) {
+    fn consume(&mut self, expected: &TokenKind) -> Result<(), ParseError> {
+        if self.peek().map(|t| &t.kind) == Some(expected) {
             self.advance();
             Ok(())
         } else {
-            Err(ParseError::UnexpectedToken(self.peek().cloned().unwrap_or(Token::Whitespace)))
+            Err(
+                ParseError::UnexpectedToken(
+                    self
+                        .peek()
+                        .cloned()
+                        .unwrap_or_else(|| Token::new(TokenKind::Whitespace, String::new()))
+                )
+            )
         }
     }
 
@@ -165,25 +184,25 @@ impl Parser {
 
     fn parse_if_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'if'
-        self.consume(Token::LeftParen)?;
+        self.consume(&TokenKind::LeftParen)?;
         let condition = self.parse_expression()?;
-        self.consume(Token::RightParen)?;
+        self.consume(&TokenKind::RightParen)?;
 
-        self.consume(Token::LeftBrace)?;
+        self.consume(&TokenKind::LeftBrace)?;
         let mut then_branch = Vec::new();
-        while self.peek() != Some(&Token::RightBrace) {
+        while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
             then_branch.push(self.parse_statement()?);
         }
-        self.consume(Token::RightBrace)?;
+        self.consume(&TokenKind::RightBrace)?;
 
-        let else_branch = if self.peek() == Some(&Token::Else) {
+        let else_branch = if self.peek().map(|t| &t.kind) == Some(&TokenKind::Else) {
             self.advance(); // consume 'else'
-            self.consume(Token::LeftBrace)?;
+            self.consume(&TokenKind::LeftBrace)?;
             let mut statements = Vec::new();
-            while self.peek() != Some(&Token::RightBrace) {
+            while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
                 statements.push(self.parse_statement()?);
             }
-            self.consume(Token::RightBrace)?;
+            self.consume(&TokenKind::RightBrace)?;
             Some(statements)
         } else {
             None
@@ -198,23 +217,23 @@ impl Parser {
 
     fn parse_loop_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'loop'
-        self.consume(Token::LeftBrace)?;
+        self.consume(&TokenKind::LeftBrace)?;
 
         let mut body = Vec::new();
-        while self.peek() != Some(&Token::RightBrace) {
+        while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
             body.push(self.parse_statement()?);
         }
-        self.consume(Token::RightBrace)?;
+        self.consume(&TokenKind::RightBrace)?;
 
         Ok(Statement::Loop { body })
     }
 
     fn parse_save_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'save'
-        self.consume(Token::LeftParen)?;
+        self.consume(&TokenKind::LeftParen)?;
         let filename = self.parse_expression()?;
-        self.consume(Token::RightParen)?;
-        self.consume(Token::Semicolon)?;
+        self.consume(&TokenKind::RightParen)?;
+        self.consume(&TokenKind::Semicolon)?;
 
         Ok(Statement::Save { filename })
     }
