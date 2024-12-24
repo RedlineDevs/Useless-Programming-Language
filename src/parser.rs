@@ -1,25 +1,58 @@
+//! # Parser Module
+//!
+//! The parser module is responsible for converting tokens into an Abstract Syntax Tree (AST).
+//! It tries its best to make sense of your code, but don't get your hopes up.
+//!
+//! ## Example
+//! ```rust
+//! use useless_lang::parser::Parser;
+//! use useless_lang::lexer::Lexer;
+//!
+//! let input = "print(\"Hello, World!\");";
+//! let lexer = Lexer::new(input);
+//! let tokens = lexer.collect();
+//! let mut parser = Parser::new(tokens);
+//! let ast = parser.parse().expect("Parser failed successfully");
+//! ```
+
 use crate::ast::{ BinaryOp, Expression, Literal, Program, Statement };
 use crate::lexer::{ Token, TokenKind };
 use thiserror::Error;
 
+/// Errors that might occur during parsing.
+/// These are the only predictable things about the language.
 #[derive(Debug, Error)]
 #[allow(dead_code)]
 pub enum ParseError {
-    #[error("Unexpected token: {0:?}")] UnexpectedToken(Token),
+    /// Found a token we weren't expecting (which is all of them)
+    #[error("Unexpected token: {0:?}")]
+    UnexpectedToken(Token),
+
+    /// Reached the end of input prematurely (or did we?)
     #[error("Expected token, but got none")]
     UnexpectedEof,
+
+    /// Found a string literal that's not quite right
     #[error("Invalid string literal")]
     InvalidStringLiteral,
+
+    /// Found a number literal that's more creative than we can handle
     #[error("Invalid number literal")]
     InvalidNumberLiteral,
 }
 
+/// The parser for the Useless Programming Language.
+/// It converts tokens into an AST, assuming you're lucky.
 pub struct Parser {
+    /// The tokens to parse (or misparse)
     tokens: Vec<Token>,
+    /// Current position in the token stream
     current: usize,
 }
 
 impl Parser {
+    /// Creates a new parser from a vector of tokens.
+    /// Use at your own risk.
     pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             tokens,
@@ -27,6 +60,9 @@ impl Parser {
         }
     }
 
+    /// Attempts to parse a complete program.
+    /// Returns a Result containing either a Program or a ParseError.
+    /// The Program might not do what you want, but at least it's valid syntax!
     pub fn parse(&mut self) -> Result<Program, ParseError> {
         let mut program = Vec::new();
         while !self.is_at_end() {
@@ -35,6 +71,8 @@ impl Parser {
         Ok(program)
     }
 
+    /// Parses a single statement.
+    /// Each statement has an equal chance of doing something unexpected.
     fn parse_statement(&mut self) -> Result<Statement, ParseError> {
         match self.peek().map(|t| &t.kind) {
             Some(TokenKind::Let) => self.parse_let_statement(),
@@ -50,6 +88,7 @@ impl Parser {
         }
     }
 
+    /// Parses a let statement, which might let your variables go on vacation.
     fn parse_let_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'let'
         let name = match self.advance() {
@@ -66,6 +105,7 @@ impl Parser {
         Ok(Statement::Let { name, value })
     }
 
+    /// Parses a print statement that will open random websites.
     fn parse_print_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'print'
         self.consume(&TokenKind::LeftParen)?;
@@ -76,6 +116,7 @@ impl Parser {
         Ok(Statement::Print { value })
     }
 
+    /// Parses an expression, which might evaluate to something entirely different.
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
         match self.peek().map(|t| &t.kind) {
             Some(TokenKind::StringLiteral) => {
@@ -130,6 +171,7 @@ impl Parser {
         }
     }
 
+    /// Parses a function call that might return null or go for coffee.
     fn parse_function_call(&mut self, name: String) -> Result<Expression, ParseError> {
         self.consume(&TokenKind::LeftParen)?;
         let mut arguments = Vec::new();
@@ -148,6 +190,8 @@ impl Parser {
         Ok(Expression::FunctionCall { name, arguments })
     }
 
+    /// Consumes a token if it matches the expected kind.
+    /// Otherwise, returns an error that might make you question your life choices.
     fn consume(&mut self, expected: &TokenKind) -> Result<(), ParseError> {
         if self.peek().map(|t| &t.kind) == Some(expected) {
             self.advance();
@@ -164,18 +208,26 @@ impl Parser {
         }
     }
 
+    /// Checks if we've reached the end of input.
+    /// One of the few functions that does exactly what it says.
     fn is_at_end(&self) -> bool {
         self.current >= self.tokens.len()
     }
 
+    /// Peeks at the next token without consuming it.
+    /// What you see might not be what you get.
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.current)
     }
 
+    /// Returns the previously consumed token.
+    /// Useful for error messages that nobody will read.
     fn previous(&self) -> Option<Token> {
         if self.current > 0 { self.tokens.get(self.current - 1).cloned() } else { None }
     }
 
+    /// Advances to the next token.
+    /// One small step for the parser, one giant leap into confusion.
     fn advance(&mut self) -> Option<Token> {
         if !self.is_at_end() {
             self.current += 1;
@@ -183,6 +235,7 @@ impl Parser {
         self.previous()
     }
 
+    /// Parses an if statement that always executes the else branch.
     fn parse_if_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'if'
         self.consume(&TokenKind::LeftParen)?;
@@ -216,6 +269,7 @@ impl Parser {
         })
     }
 
+    /// Parses a loop statement that executes exactly once.
     fn parse_loop_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'loop'
         self.consume(&TokenKind::LeftBrace)?;
@@ -229,6 +283,7 @@ impl Parser {
         Ok(Statement::Loop { body })
     }
 
+    /// Parses a save statement that always crashes.
     fn parse_save_statement(&mut self) -> Result<Statement, ParseError> {
         self.advance(); // consume 'save'
         self.consume(&TokenKind::LeftParen)?;
