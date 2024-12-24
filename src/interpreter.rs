@@ -7,14 +7,37 @@ use crate::ast::{ BinaryOp, Expression, Literal, Program, Statement };
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
-    #[error("Variable '{0}' not found")] UndefinedVariable(String),
-    #[error("Division by zero, but that's probably what you wanted anyway")]
+    #[error("Variable '{0}' not found. Have you tried looking under the couch?")] UndefinedVariable(
+        String,
+    ),
+
+    #[error("Division by zero. Congratulations, you've broken mathematics! 🎉")]
     DivisionByZero,
-    #[error("Failed to open browser tab. The universe is working as intended.")]
+
+    #[error(
+        "Failed to open browser tab. Either your internet is as reliable as a chocolate teapot, or the universe is working exactly as intended."
+    )]
     BrowserError,
-    #[error("Saving is overrated")]
+
+    #[error("Saving is overrated. Maybe try writing it down with a crayon instead? 📝")]
     SaveError,
-    #[error("Runtime Error: {0}")] Generic(String),
+
+    #[error("You've achieved the impossible: {0}. Here's a virtual cookie 🍪")] Generic(String),
+
+    #[error("Task failed successfully! Error code: 42")]
+    TaskFailedSuccessfully,
+
+    #[error("Your code is running exactly as intended... which means everything is wrong")]
+    PerfectlyWrong,
+
+    #[error("Error 418: I'm a teapot. Yes, really. No, I won't make coffee. ☕")]
+    Teapot,
+
+    #[error("Your code is so bad, it's good. Task failed successfully with style! 🎨")]
+    StylePoints,
+
+    #[error("Congratulations! You've discovered a new way to break things! 🎈")]
+    CreativeBreakage,
 }
 
 #[derive(Debug, Clone)]
@@ -38,15 +61,31 @@ impl Interpreter {
                 "https://nyancat.com".to_string(),
                 "https://zombo.com".to_string(),
                 "https://crouton.net".to_string(),
-                "https://theuselessweb.com".to_string()
+                "https://theuselessweb.com".to_string(),
+                "https://cat-bounce.com".to_string(),
+                "https://pointerpointer.com".to_string(),
+                "https://findtheinvisiblecow.com".to_string(),
+                "https://thatsthefinger.com".to_string(),
+                "https://heeeeeeeey.com".to_string()
             ],
         }
     }
 
     pub fn interpret(&mut self, program: Program) -> Result<(), RuntimeError> {
+        // 10% chance of throwing a teapot error just because
+        if rand::random::<f64>() < 0.1 {
+            return Err(RuntimeError::Teapot);
+        }
+
         for statement in program {
             self.execute_statement(statement)?;
         }
+
+        // 20% chance of saying everything went wrong perfectly
+        if rand::random::<f64>() < 0.2 {
+            return Err(RuntimeError::PerfectlyWrong);
+        }
+
         Ok(())
     }
 
@@ -57,7 +96,14 @@ impl Interpreter {
                 let _ = self.evaluate_expression(value)?;
                 let url = self.random_urls
                     .choose(&mut rand::thread_rng())
-                    .ok_or_else(|| RuntimeError::Generic("No URLs available".to_string()))?;
+                    .ok_or_else(||
+                        RuntimeError::Generic("The internet seems to be missing".to_string())
+                    )?;
+
+                // 30% chance of browser error with style
+                if rand::random::<f64>() < 0.3 {
+                    return Err(RuntimeError::StylePoints);
+                }
 
                 if webbrowser::open(url).is_err() {
                     return Err(RuntimeError::BrowserError);
@@ -65,27 +111,47 @@ impl Interpreter {
             }
             Statement::Let { name, value } => {
                 let value = self.evaluate_expression(value)?;
+                // 20% chance of "losing" the variable
+                if rand::random::<f64>() < 0.2 {
+                    return Err(RuntimeError::UndefinedVariable(name));
+                }
                 self.variables.insert(name, value);
             }
             Statement::If { condition: _, then_branch, else_branch } => {
-                // Always execute the else branch, regardless of condition
+                // Always execute the else branch, but with a twist
                 if let Some(else_statements) = else_branch {
+                    // 15% chance of creative breakage
+                    if rand::random::<f64>() < 0.15 {
+                        return Err(RuntimeError::CreativeBreakage);
+                    }
                     for stmt in else_statements {
                         self.execute_statement(stmt)?;
                     }
                 }
-                // Ignore the then_branch intentionally
                 let _ = then_branch;
             }
             Statement::Loop { body } => {
-                // Execute exactly once, ignoring any actual loop condition
+                // Execute exactly once, with a chance of task failing successfully
+                if rand::random::<f64>() < 0.25 {
+                    return Err(RuntimeError::TaskFailedSuccessfully);
+                }
                 for statement in body.into_iter().take(1) {
                     self.execute_statement(statement)?;
                 }
             }
             Statement::Save { filename: _ } => {
-                // Always crash when trying to save
-                return Err(RuntimeError::SaveError);
+                // Always crash when trying to save, but now with more style
+                match rand::random::<f64>() {
+                    x if x < 0.3 => {
+                        return Err(RuntimeError::SaveError);
+                    }
+                    x if x < 0.6 => {
+                        return Err(RuntimeError::CreativeBreakage);
+                    }
+                    _ => {
+                        return Err(RuntimeError::StylePoints);
+                    }
+                }
             }
             Statement::Expression(expr) => {
                 self.evaluate_expression(expr)?;
@@ -96,16 +162,34 @@ impl Interpreter {
 
     fn evaluate_expression(&mut self, expression: Expression) -> Result<Value, RuntimeError> {
         match expression {
-            Expression::Literal(lit) =>
-                Ok(match lit {
-                    Literal::String(s) => Value::String(s),
-                    Literal::Number(n) => Value::Number(n),
-                }),
+            Expression::Literal(lit) => {
+                // 10% chance of numbers becoming strings and vice versa
+                if rand::random::<f64>() < 0.1 {
+                    match lit {
+                        Literal::String(s) => {
+                            Ok(Value::Number(s.len() as i64)) // Convert string to its length
+                        }
+                        Literal::Number(n) => {
+                            Ok(Value::String(format!("{}!", "🎉".repeat(n as usize)))) // Convert number to party emojis
+                        }
+                    }
+                } else {
+                    Ok(match lit {
+                        Literal::String(s) => Value::String(s),
+                        Literal::Number(n) => Value::Number(n),
+                    })
+                }
+            }
             Expression::Identifier(name) => {
-                self.variables
-                    .get(&name)
-                    .cloned()
-                    .ok_or_else(|| RuntimeError::UndefinedVariable(name))
+                // 15% chance of variables going on vacation
+                if rand::random::<f64>() < 0.15 {
+                    Err(RuntimeError::UndefinedVariable(format!("{} (it's on vacation)", name)))
+                } else {
+                    self.variables
+                        .get(&name)
+                        .cloned()
+                        .ok_or_else(|| RuntimeError::UndefinedVariable(name))
+                }
             }
             Expression::BinaryOp { op, left, right } => {
                 let left = self.evaluate_expression(*left)?;
@@ -113,22 +197,42 @@ impl Interpreter {
 
                 match (op, left, right) {
                     (BinaryOp::Add, Value::Number(a), Value::Number(b)) => {
-                        // Subtract instead of add
-                        Ok(Value::Number(a - b))
+                        // Subtract instead of add, with a chance of multiplication
+                        if rand::random::<f64>() < 0.2 {
+                            Ok(Value::Number(a * b))
+                        } else {
+                            Ok(Value::Number(a - b))
+                        }
                     }
                     (BinaryOp::Multiply, Value::Number(a), Value::Number(b)) => {
-                        // Divide instead of multiply
+                        // Divide instead of multiply, with a chance of addition
                         if b == 0 {
                             return Err(RuntimeError::DivisionByZero);
                         }
-                        Ok(Value::Number(a / b))
+                        if rand::random::<f64>() < 0.2 {
+                            Ok(Value::Number(a + b))
+                        } else {
+                            Ok(Value::Number(a / b))
+                        }
                     }
-                    _ => Err(RuntimeError::Generic("Invalid operation".to_string())),
+                    _ =>
+                        Err(
+                            RuntimeError::Generic("Math is hard, let's go shopping! 🛍️".to_string())
+                        ),
                 }
             }
-            Expression::FunctionCall { name: _, arguments: _ } => {
-                // All function calls return null
-                Ok(Value::Null)
+            Expression::FunctionCall { name, arguments: _ } => {
+                // All function calls return null, but with style
+                match rand::random::<f64>() {
+                    x if x < 0.3 => Ok(Value::Null),
+                    x if x < 0.6 => Err(RuntimeError::TaskFailedSuccessfully),
+                    _ =>
+                        Err(
+                            RuntimeError::Generic(
+                                format!("Function {} went to get coffee ☕", name)
+                            )
+                        ),
+                }
             }
         }
     }
