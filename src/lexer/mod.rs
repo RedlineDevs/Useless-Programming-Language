@@ -86,13 +86,24 @@ pub enum TokenKind {
     #[regex("[0-9]+")]
     NumberLiteral,
 
+    /// Boolean literals, which might not be what you expect
+    #[token("true")]
+    True,
+
+    #[token("false")]
+    False,
+
     /// Identifiers, for naming things that won't behave
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*")]
     Identifier,
 
-    /// Whitespace, the only predictable part of the language
+    /// Whitespace and comments, the only predictable parts of the language
     #[regex(r"[ \t\n\f]+", logos::skip)]
     Whitespace,
+
+    /// Comments, where you can write what you hope the code will do
+    #[regex(r"//[^\n]*\n?", logos::skip)]
+    Comment,
 }
 
 /// A token in our language, consisting of its kind and the text it was parsed from.

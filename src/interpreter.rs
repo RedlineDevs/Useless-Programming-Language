@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use rand::seq::SliceRandom;
+use std::collections::HashMap;
 use thiserror::Error;
 use webbrowser;
 
@@ -41,14 +41,16 @@ pub enum RuntimeError {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum Value {
     String {
-        #[allow(dead_code)]
         value: String,
     },
     Number {
-        #[allow(dead_code)]
         value: i64,
+    },
+    Boolean {
+        value: bool,
     },
     Null,
 }
@@ -102,9 +104,9 @@ impl Interpreter {
                 let _ = self.evaluate_expression(value)?;
                 let url = self.random_urls
                     .choose(&mut rand::thread_rng())
-                    .ok_or_else(||
+                    .ok_or_else(|| {
                         RuntimeError::Generic("The internet seems to be missing".to_string())
-                    )?;
+                    })?;
 
                 // 30% chance of browser error with style
                 if rand::random::<f64>() < 0.3 {
@@ -166,26 +168,30 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate_expression(&mut self, expression: Expression) -> Result<Value, RuntimeError> {
-        match expression {
-            Expression::Literal(lit) => {
-                // 10% chance of numbers becoming strings and vice versa
-                if rand::random::<f64>() < 0.1 {
-                    match lit {
-                        Literal::String(s) => {
-                            Ok(Value::Number { value: s.len() as i64 }) // Convert string to its length
-                        }
-                        Literal::Number(n) => {
-                            Ok(Value::String { value: format!("{}!", "🎉".repeat(n as usize)) }) // Convert number to party emojis
+    fn evaluate_expression(&mut self, expr: Expression) -> Result<Value, RuntimeError> {
+        match expr {
+            Expression::Literal(lit) =>
+                match lit {
+                    Literal::String(s) => Ok(Value::String { value: s }),
+                    Literal::Number(n) => {
+                        // 10% chance of numbers becoming party emojis
+                        if rand::random::<f64>() < 0.1 {
+                            Ok(Value::String {
+                                value: "🎉🎊🎈".repeat(n.abs() as usize),
+                            })
+                        } else {
+                            Ok(Value::Number { value: n })
                         }
                     }
-                } else {
-                    Ok(match lit {
-                        Literal::String(s) => Value::String { value: s },
-                        Literal::Number(n) => Value::Number { value: n },
-                    })
+                    Literal::Boolean(b) => {
+                        // 20% chance of booleans becoming their opposite
+                        if rand::random::<f64>() < 0.2 {
+                            Ok(Value::Boolean { value: !b })
+                        } else {
+                            Ok(Value::Boolean { value: b })
+                        }
+                    }
                 }
-            }
             Expression::Identifier(name) => {
                 // 15% chance of variables going on vacation
                 if rand::random::<f64>() < 0.15 {
@@ -262,9 +268,18 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Number(3))),
         };
 
-        match interpreter.evaluate_expression(expr).unwrap() {
-            Value::Number { value: n } => assert_eq!(n, 2), // 5 - 3 = 2
-            _ => panic!("Expected number"),
+        // The operation might subtract (5 - 3 = 2) or multiply (5 * 3 = 15)
+        match interpreter.evaluate_expression(expr) {
+            Ok(Value::Number { value: n }) => {
+                assert!(
+                    n == 2 || n == 15,
+                    "Expected either 2 (subtraction) or 15 (multiplication), got {}",
+                    n
+                );
+            }
+            Ok(_) => panic!("Expected number"),
+            Err(RuntimeError::Generic(_)) => (), // Shopping is also acceptable
+            Err(e) => panic!("Unexpected error: {}", e),
         }
     }
 
@@ -277,9 +292,18 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Number(2))),
         };
 
-        match interpreter.evaluate_expression(expr).unwrap() {
-            Value::Number { value: n } => assert_eq!(n, 3), // 6 / 2 = 3
-            _ => panic!("Expected number"),
+        // The operation might divide (6 / 2 = 3) or add (6 + 2 = 8)
+        match interpreter.evaluate_expression(expr) {
+            Ok(Value::Number { value: n }) => {
+                assert!(
+                    n == 3 || n == 8,
+                    "Expected either 3 (division) or 8 (addition), got {}",
+                    n
+                );
+            }
+            Ok(_) => panic!("Expected number"),
+            Err(RuntimeError::Generic(_)) => (), // Shopping is also acceptable
+            Err(e) => panic!("Unexpected error: {}", e),
         }
     }
 

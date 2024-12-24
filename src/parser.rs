@@ -15,8 +15,8 @@
 //! let ast = parser.parse().expect("Parser failed successfully");
 //! ```
 
-use crate::ast::{ BinaryOp, Expression, Literal, Program, Statement };
-use crate::lexer::{ Token, TokenKind };
+use crate::ast::{BinaryOp, Expression, Literal, Program, Statement};
+use crate::lexer::{Token, TokenKind};
 use thiserror::Error;
 
 /// Errors that might occur during parsing.
@@ -54,10 +54,7 @@ impl Parser {
     /// Creates a new parser from a vector of tokens.
     /// Use at your own risk.
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            current: 0,
-        }
+        Self { tokens, current: 0 }
     }
 
     /// Attempts to parse a complete program.
@@ -126,10 +123,19 @@ impl Parser {
             }
             Some(TokenKind::NumberLiteral) => {
                 let token = self.advance().unwrap();
-                let number = token.text
+                let number = token
+                    .text
                     .parse::<i64>()
                     .map_err(|_| ParseError::InvalidNumberLiteral)?;
                 Ok(Expression::Literal(Literal::Number(number)))
+            }
+            Some(TokenKind::True) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::Boolean(true)))
+            }
+            Some(TokenKind::False) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::Boolean(false)))
             }
             Some(TokenKind::Add) | Some(TokenKind::Multiply) => {
                 let op = match self.advance().unwrap().kind {
@@ -159,15 +165,11 @@ impl Parser {
                     Ok(Expression::Identifier(name))
                 }
             }
-            _ =>
-                Err(
-                    ParseError::UnexpectedToken(
-                        self
-                            .peek()
-                            .cloned()
-                            .unwrap_or_else(|| Token::new(TokenKind::Whitespace, String::new()))
-                    )
-                ),
+            _ => Err(ParseError::UnexpectedToken(
+                self.peek()
+                    .cloned()
+                    .unwrap_or_else(|| Token::new(TokenKind::Whitespace, String::new())),
+            )),
         }
     }
 
@@ -197,14 +199,11 @@ impl Parser {
             self.advance();
             Ok(())
         } else {
-            Err(
-                ParseError::UnexpectedToken(
-                    self
-                        .peek()
-                        .cloned()
-                        .unwrap_or_else(|| Token::new(TokenKind::Whitespace, String::new()))
-                )
-            )
+            Err(ParseError::UnexpectedToken(
+                self.peek()
+                    .cloned()
+                    .unwrap_or_else(|| Token::new(TokenKind::Whitespace, String::new())),
+            ))
         }
     }
 
@@ -223,7 +222,11 @@ impl Parser {
     /// Returns the previously consumed token.
     /// Useful for error messages that nobody will read.
     fn previous(&self) -> Option<Token> {
-        if self.current > 0 { self.tokens.get(self.current - 1).cloned() } else { None }
+        if self.current > 0 {
+            self.tokens.get(self.current - 1).cloned()
+        } else {
+            None
+        }
     }
 
     /// Advances to the next token.
@@ -343,7 +346,11 @@ mod tests {
         assert_eq!(program.len(), 1);
 
         match &program[0] {
-            Statement::Expression(Expression::BinaryOp { op, left: _, right: _ }) => {
+            Statement::Expression(Expression::BinaryOp {
+                op,
+                left: _,
+                right: _,
+            }) => {
                 assert!(matches!(op, BinaryOp::Add));
             }
             _ => panic!("Expected binary operation"),

@@ -16,16 +16,18 @@
 
 /// Represents literal values in the language.
 /// These values might not stay in their original form for long.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     /// A string literal, which might become a number
     String(String),
     /// A number literal, which might become a string of party emojis
     Number(i64),
+    /// A boolean literal, which might become a string of party emojis
+    Boolean(bool),
 }
 
 /// Binary operators that do the opposite of what you'd expect.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOp {
     /// Subtracts when you want to add
     Add,
@@ -34,7 +36,7 @@ pub enum BinaryOp {
 }
 
 /// Expressions that may or may not evaluate to what you expect.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     /// A literal value (for now)
     Literal(Literal),
@@ -60,7 +62,7 @@ pub enum Expression {
 }
 
 /// Statements that make up a Useless program.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     /// Variable declaration (results may vary)
     Let {

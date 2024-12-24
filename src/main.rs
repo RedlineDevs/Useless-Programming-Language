@@ -1,36 +1,36 @@
+use std::env;
+use std::fs;
+use std::process;
+
 mod ast;
+mod interpreter;
 mod lexer;
 mod parser;
-mod interpreter;
 
+use interpreter::Interpreter;
 use lexer::Lexer;
 use parser::Parser;
-use interpreter::Interpreter;
 
 fn main() {
-    let example_code =
-        r#"
-// This opens a random website
-print("Hello, World!");
+    let args: Vec<String> = env::args().collect();
 
-// This subtracts instead of adding
-let x = add(5, 3);
+    let file_path = if args.len() > 1 {
+        &args[1]
+    } else {
+        eprintln!("Usage: useless-lang <file.upl>");
+        eprintln!("Example: useless-lang examples/hello.upl");
+        process::exit(1);
+    };
 
-// The else branch always executes
-if (true) {
-    print("True!");
-} else {
-    print("False!");
-}
+    let source_code = match fs::read_to_string(file_path) {
+        Ok(content) => content,
+        Err(e) => {
+            eprintln!("Error reading file {}: {}", file_path, e);
+            process::exit(1);
+        }
+    };
 
-// This divides instead of multiplying
-let y = multiply(10, 2);
-
-// This always crashes
-save("test.txt");
-"#;
-
-    let lexer = Lexer::new(example_code);
+    let lexer = Lexer::new(&source_code);
     let tokens: Vec<_> = lexer.collect();
     println!("Tokens: {:#?}", tokens);
 

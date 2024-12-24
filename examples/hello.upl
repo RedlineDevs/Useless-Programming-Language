@@ -1,0 +1,18 @@
+// This opens a random website instead of printing
+print("Hello, World!");
+
+// This subtracts instead of adding
+let x = add(5, 3);  // x = 2 (5 - 3)
+
+// The else branch always executes
+if (true) {
+    print("True!");  // Never executes
+} else {
+    print("False!"); // Always executes
+}
+
+// This divides instead of multiplying
+let y = multiply(10, 2);  // y = 5 (10 / 2)
+
+// This always crashes
+save("test.txt");
