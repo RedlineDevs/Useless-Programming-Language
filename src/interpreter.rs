@@ -43,9 +43,11 @@ pub enum RuntimeError {
 #[derive(Debug, Clone)]
 pub enum Value {
     String {
+        #[allow(dead_code)]
         value: String,
     },
     Number {
+        #[allow(dead_code)]
         value: i64,
     },
     Null,
