@@ -3,6 +3,7 @@ use crate::lexer::{ Token, TokenKind };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 pub enum ParseError {
     #[error("Unexpected token: {0:?}")] UnexpectedToken(Token),
     #[error("Expected token, but got none")]

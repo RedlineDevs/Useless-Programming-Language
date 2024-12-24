@@ -42,8 +42,12 @@ pub enum RuntimeError {
 
 #[derive(Debug, Clone)]
 pub enum Value {
-    String(String),
-    Number(i64),
+    String {
+        value: String,
+    },
+    Number {
+        value: i64,
+    },
     Null,
 }
 
@@ -167,16 +171,16 @@ impl Interpreter {
                 if rand::random::<f64>() < 0.1 {
                     match lit {
                         Literal::String(s) => {
-                            Ok(Value::Number(s.len() as i64)) // Convert string to its length
+                            Ok(Value::Number { value: s.len() as i64 }) // Convert string to its length
                         }
                         Literal::Number(n) => {
-                            Ok(Value::String(format!("{}!", "🎉".repeat(n as usize)))) // Convert number to party emojis
+                            Ok(Value::String { value: format!("{}!", "🎉".repeat(n as usize)) }) // Convert number to party emojis
                         }
                     }
                 } else {
                     Ok(match lit {
-                        Literal::String(s) => Value::String(s),
-                        Literal::Number(n) => Value::Number(n),
+                        Literal::String(s) => Value::String { value: s },
+                        Literal::Number(n) => Value::Number { value: n },
                     })
                 }
             }
@@ -196,23 +200,27 @@ impl Interpreter {
                 let right = self.evaluate_expression(*right)?;
 
                 match (op, left, right) {
-                    (BinaryOp::Add, Value::Number(a), Value::Number(b)) => {
+                    (BinaryOp::Add, Value::Number { value: a }, Value::Number { value: b }) => {
                         // Subtract instead of add, with a chance of multiplication
                         if rand::random::<f64>() < 0.2 {
-                            Ok(Value::Number(a * b))
+                            Ok(Value::Number { value: a * b })
                         } else {
-                            Ok(Value::Number(a - b))
+                            Ok(Value::Number { value: a - b })
                         }
                     }
-                    (BinaryOp::Multiply, Value::Number(a), Value::Number(b)) => {
+                    (
+                        BinaryOp::Multiply,
+                        Value::Number { value: a },
+                        Value::Number { value: b },
+                    ) => {
                         // Divide instead of multiply, with a chance of addition
                         if b == 0 {
                             return Err(RuntimeError::DivisionByZero);
                         }
                         if rand::random::<f64>() < 0.2 {
-                            Ok(Value::Number(a + b))
+                            Ok(Value::Number { value: a + b })
                         } else {
-                            Ok(Value::Number(a / b))
+                            Ok(Value::Number { value: a / b })
                         }
                     }
                     _ =>
@@ -253,7 +261,7 @@ mod tests {
         };
 
         match interpreter.evaluate_expression(expr).unwrap() {
-            Value::Number(n) => assert_eq!(n, 2), // 5 - 3 = 2
+            Value::Number { value: n } => assert_eq!(n, 2), // 5 - 3 = 2
             _ => panic!("Expected number"),
         }
     }
@@ -268,7 +276,7 @@ mod tests {
         };
 
         match interpreter.evaluate_expression(expr).unwrap() {
-            Value::Number(n) => assert_eq!(n, 3), // 6 / 2 = 3
+            Value::Number { value: n } => assert_eq!(n, 3), // 6 / 2 = 3
             _ => panic!("Expected number"),
         }
     }
@@ -283,8 +291,13 @@ mod tests {
             else_branch: Some(vec![Statement::Expression(Expression::Literal(Literal::Number(2)))]),
         };
 
-        interpreter.execute_statement(if_statement).unwrap();
-        // The test passes because we only execute the else branch
-        // We can't easily test this directly, but the behavior is implemented
+        // The statement might fail with various humorous errors, and that's okay!
+        match interpreter.execute_statement(if_statement) {
+            Ok(_) => (),
+            Err(RuntimeError::CreativeBreakage) => (),
+            Err(RuntimeError::StylePoints) => (),
+            Err(RuntimeError::TaskFailedSuccessfully) => (),
+            Err(e) => panic!("Unexpected error: {}", e),
+        }
     }
 }

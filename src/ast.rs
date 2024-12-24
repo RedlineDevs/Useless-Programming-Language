@@ -21,6 +21,7 @@ pub enum Expression {
     },
     FunctionCall {
         name: String,
+        #[allow(dead_code)]
         arguments: Vec<Expression>,
     },
 }
@@ -35,6 +36,7 @@ pub enum Statement {
         value: Expression,
     },
     If {
+        #[allow(dead_code)]
         condition: Expression,
         then_branch: Vec<Statement>,
         else_branch: Option<Vec<Statement>>,
@@ -43,6 +45,7 @@ pub enum Statement {
         body: Vec<Statement>,
     },
     Save {
+        #[allow(dead_code)]
         filename: Expression,
     },
     Expression(Expression),
