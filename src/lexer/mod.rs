@@ -1,7 +1,7 @@
 //! # Lexer Module
 //!
-//! The lexer module is responsible for tokenizing source code into a stream of tokens.
-//! Despite being the most straightforward part of the compiler, it still manages to be useless.
+//! The lexer module is responsible for breaking down source code into tokens.
+//! It's like a shredder, but for code instead of documents.
 //!
 //! ## Example
 //! ```rust
@@ -9,137 +9,120 @@
 //!
 //! let input = "print(\"Hello, World!\");";
 //! let lexer = Lexer::new(input);
-//! for token in lexer {
-//!     println!("{:?}", token);
-//! }
+//! let tokens: Vec<Token> = lexer.collect();
 //! ```
 
 use logos::Logos;
 
-/// Represents the different types of tokens in the Useless Programming Language.
-/// Each token is as useless as the next one.
+/// All the different kinds of tokens in our language.
+/// Each one is special in its own useless way.
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum TokenKind {
-    /// The `print` keyword, which never actually prints anything
+    /// The print keyword, which opens random websites
     #[token("print")]
     Print,
 
-    /// The `let` keyword, for variables that might go on vacation
+    /// The let keyword, for variables that might go on vacation
     #[token("let")]
     Let,
 
-    /// The `if` keyword, for conditions that are always false (effectively)
+    /// The if keyword, for conditions that always choose the else branch
     #[token("if")]
     If,
 
-    /// The `else` keyword, the only part of an if statement that matters
+    /// The else keyword, because that's where we're going anyway
     #[token("else")]
     Else,
 
-    /// The `loop` keyword, for loops that execute exactly once
+    /// The loop keyword, for code that runs exactly once
     #[token("loop")]
     Loop,
 
-    /// The `return` keyword, for returning values that will be ignored
-    #[token("return")]
-    Return,
-
-    /// The `add` keyword, for subtraction operations
-    #[token("add")]
-    Add,
-
-    /// The `multiply` keyword, for division operations
-    #[token("multiply")]
-    Multiply,
-
-    /// The `save` keyword, for operations that always fail
+    /// The save keyword, which crashes the program
     #[token("save")]
     Save,
 
-    /// Left parenthesis, one half of a matching pair (maybe)
+    /// The add function, which actually subtracts
+    #[token("add")]
+    Add,
+
+    /// The multiply function, which actually divides
+    #[token("multiply")]
+    Multiply,
+
+    /// Left parenthesis, the beginning of confusion
     #[token("(")]
     LeftParen,
 
-    /// Right parenthesis, the other half (if you're lucky)
+    /// Right parenthesis, the end of confusion
     #[token(")")]
     RightParen,
 
-    /// Left brace, opens a block of code that might not do what you expect
+    /// Left brace, where dreams begin
     #[token("{")]
     LeftBrace,
 
-    /// Right brace, closes a block of code (if it hasn't crashed yet)
+    /// Right brace, where dreams end
     #[token("}")]
     RightBrace,
+
+    /// Semicolon, because we need more punctuation
+    #[token(";")]
+    Semicolon,
 
     /// Equals sign, for assignments that might not stick
     #[token("=")]
     Equals,
 
-    /// Comma, separates things that probably shouldn't be together
+    /// Comma, the separator of things that shouldn't be together
     #[token(",")]
     Comma,
 
-    /// Semicolon, because we needed another way to end statements
-    #[token(";")]
-    Semicolon,
-
-    /// String literals, which might become numbers
-    #[regex(r#""[^"]*""#)]
+    /// String literals, which might contain anything but what you wrote
+    #[regex("\"[^\"]*\"")]
     StringLiteral,
 
-    /// Number literals, which might become party emojis
-    #[regex(r"[0-9]+")]
+    /// Number literals, which might not be the number you expect
+    #[regex("[0-9]+")]
     NumberLiteral,
 
-    /// Identifiers, for naming things that might go on vacation
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*")]
+    /// Identifiers, for naming things that won't behave
+    #[regex("[a-zA-Z_][a-zA-Z0-9_]*")]
     Identifier,
 
-    /// Whitespace and comments, the only sensible parts of the language
-    #[regex(r"//[^\n]*\n?", logos::skip)]
+    /// Whitespace, the only predictable part of the language
     #[regex(r"[ \t\n\f]+", logos::skip)]
     Whitespace,
 }
 
-/// A token in the Useless Programming Language.
-/// Combines the token type with its textual representation,
-/// just in case you want to know what the code actually said
-/// before it was misinterpreted.
+/// A token in our language, consisting of its kind and the text it was parsed from.
+/// The text might not match what you see in the source code.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
-    /// The kind of token, which determines how it will be misused
+    /// The kind of token this is
     pub kind: TokenKind,
-    /// The original text, preserved for posterity
+    /// The text that was parsed into this token
     pub text: String,
 }
 
 impl Token {
-    /// Creates a new token, if you really want to
+    /// Creates a new token with the given kind and text.
+    /// Use sparingly, as tokens have a mind of their own.
     pub fn new(kind: TokenKind, text: String) -> Self {
         Self { kind, text }
     }
 }
 
-/// The lexer for the Useless Programming Language.
-/// Converts source code into a stream of tokens,
-/// each one more useless than the last.
+/// The lexer for our language.
+/// It breaks down your code into tokens, whether you like it or not.
 pub struct Lexer<'a> {
+    /// The underlying logos lexer
     inner: logos::Lexer<'a, TokenKind>,
 }
 
 impl<'a> Lexer<'a> {
-    /// Creates a new lexer from the input source code.
-    ///
-    /// # Arguments
-    /// * `input` - The source code to tokenize
-    ///
-    /// # Example
-    /// ```rust
-    /// use useless_lang::lexer::Lexer;
-    ///
-    /// let lexer = Lexer::new("print(\"Hello, World!\");");
-    /// ```
+    /// Creates a new lexer from the given input string.
+    /// What comes out might not be what went in.
     pub fn new(input: &'a str) -> Self {
         Self {
             inner: TokenKind::lexer(input),
@@ -150,15 +133,11 @@ impl<'a> Lexer<'a> {
 impl<'a> Iterator for Lexer<'a> {
     type Item = Token;
 
-    /// Gets the next token from the input stream.
-    /// Each call has a chance of returning something you didn't expect,
-    /// but that's part of the charm.
+    /// Gets the next token from the input.
+    /// Returns None when there are no more tokens, or when the lexer gets bored.
     fn next(&mut self) -> Option<Self::Item> {
         match self.inner.next() {
-            Some(Ok(kind)) => {
-                let text = self.inner.slice().to_string();
-                Some(Token::new(kind, text))
-            }
+            Some(Ok(kind)) => Some(Token::new(kind, self.inner.slice().to_string())),
             Some(Err(_)) => self.next(),
             None => None,
         }
