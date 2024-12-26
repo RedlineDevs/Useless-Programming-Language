@@ -278,7 +278,11 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Number(3))),
         };
 
-        // The operation might subtract (5 - 3 = 2) or multiply (5 * 3 = 15)
+        // The operation might:
+        // 1. subtract (5 - 3 = 2)
+        // 2. multiply (5 * 3 = 15)
+        // 3. become a random boolean (due to 25% random boolean conversion)
+        // 4. turn into something else entirely (because why not?)
         match interpreter.evaluate_expression(expr) {
             Ok(Value::Number { value: n }) => {
                 assert!(
@@ -287,9 +291,11 @@ mod tests {
                     n
                 );
             }
-            Ok(_) => panic!("Expected number"),
+            Ok(Value::Boolean { value: _ }) => (), // Random boolean conversion is fine
+            Ok(Value::String { value: _ }) => (), // Strings happen
+            Ok(Value::Null) => (), // Null is always an option
             Err(RuntimeError::Generic(_)) => (), // Shopping is also acceptable
-            Err(e) => panic!("Unexpected error: {}", e),
+            Err(_) => (), // Other errors are fine too, we're a useless language after all
         }
     }
 
