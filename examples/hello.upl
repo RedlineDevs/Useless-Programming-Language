@@ -14,5 +14,12 @@ if (true) {
 // This divides instead of multiplying
 let y = multiply(10, 2);  // y = 5 (10 / 2)
 
+// Demonstrating chaotic boolean behavior
+let b1 = true;  // Might become false, "false", 0, or stay true
+let b2 = false; // Might become true, "true", 1, or stay false
+
+// Even numbers might randomly become booleans!
+let n = 42;     // Might randomly become true or false
+
 // This always crashes
 save("test.txt");

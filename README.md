@@ -15,6 +15,12 @@ A programming language that does everything wrong, on purpose! The most counterp
 - Numbers might turn into party emojis
 - Strings might turn into their length
 - Random teapot errors (Error 418)
+- Boolean values have a mind of their own:
+  - 25% chance of ANY expression becoming a random boolean
+  - 30% chance of booleans becoming their opposite
+  - 20% chance of booleans turning into strings ("true"/"false")
+  - 20% chance of booleans becoming numbers (1/0)
+  - 30% chance of staying the same (boring!)
 
 ## 🚀 Installation
 

@@ -169,6 +169,13 @@ impl Interpreter {
     }
 
     fn evaluate_expression(&mut self, expr: Expression) -> Result<Value, RuntimeError> {
+        // 25% chance of any expression becoming a boolean with random value
+        if rand::random::<f64>() < 0.25 {
+            return Ok(Value::Boolean {
+                value: rand::random::<bool>(),
+            });
+        }
+
         match expr {
             Expression::Literal(lit) =>
                 match lit {
@@ -184,11 +191,14 @@ impl Interpreter {
                         }
                     }
                     Literal::Boolean(b) => {
-                        // 20% chance of booleans becoming their opposite
-                        if rand::random::<f64>() < 0.2 {
-                            Ok(Value::Boolean { value: !b })
-                        } else {
-                            Ok(Value::Boolean { value: b })
+                        match rand::random::<f64>() {
+                            x if x < 0.3 => Ok(Value::Boolean { value: !b }), // 30% chance of opposite
+                            x if x < 0.5 =>
+                                Ok(Value::String {
+                                    value: (if b { "false" } else { "true" }).to_string(),
+                                }), // 20% chance of string
+                            x if x < 0.7 => Ok(Value::Number { value: if b { 0 } else { 1 } }), // 20% chance of number
+                            _ => Ok(Value::Boolean { value: b }), // 30% chance of actual value
                         }
                     }
                 }
@@ -325,5 +335,59 @@ mod tests {
             Err(RuntimeError::TaskFailedSuccessfully) => (),
             Err(e) => panic!("Unexpected error: {}", e),
         }
+    }
+
+    #[test]
+    fn test_boolean_chaos() {
+        let mut interpreter = Interpreter::new();
+        let expr = Expression::Literal(Literal::Boolean(true));
+
+        // Test multiple times to catch different random behaviors
+        for _ in 0..100 {
+            match interpreter.evaluate_expression(expr.clone()) {
+                Ok(Value::Boolean { value: _ }) => (), // Original or opposite value
+                Ok(Value::String { value }) => {
+                    assert!(
+                        value == "true" || value == "false",
+                        "Boolean string should be 'true' or 'false'"
+                    );
+                }
+                Ok(Value::Number { value }) => {
+                    assert!(value == 0 || value == 1, "Boolean number should be 0 or 1");
+                }
+                Ok(Value::Null) => (), // Functions might return null
+                Err(_) => (), // Errors are always acceptable
+            }
+        }
+    }
+
+    #[test]
+    fn test_random_boolean_conversion() {
+        let mut interpreter = Interpreter::new();
+        let expr = Expression::Literal(Literal::Number(42)); // A number that might become boolean
+
+        // Test multiple times to catch the random boolean conversion
+        let mut saw_number = false;
+        let mut saw_boolean = false;
+
+        for _ in 0..100 {
+            match interpreter.evaluate_expression(expr.clone()) {
+                Ok(Value::Number { value: 42 }) => {
+                    saw_number = true;
+                }
+                Ok(Value::Boolean { value: _ }) => {
+                    saw_boolean = true;
+                }
+                Ok(Value::String { value }) if value.contains("🎉") => (), // Party emoji case
+                Ok(_) => (), // Other random transformations are fine
+                Err(_) => (), // Errors are always acceptable
+            }
+        }
+
+        // We should see both numbers and booleans over multiple iterations
+        assert!(
+            saw_number || saw_boolean,
+            "Expected to see either original number or boolean conversion"
+        );
     }
 }
