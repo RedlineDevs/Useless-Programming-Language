@@ -32,7 +32,7 @@ A programming language that does everything wrong, on purpose! The most counterp
 2. Clone this repository
    ```bash
    git clone https://github.com/RedlineDevs/Useless-Programming-Language.git
-   cd useless-lang
+   cd Useless-Programming-Language
    ```
 
 3. Build the project
