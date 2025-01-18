@@ -77,6 +77,16 @@ impl Parser {
             Some(TokenKind::If) => self.parse_if_statement(),
             Some(TokenKind::Loop) => self.parse_loop_statement(),
             Some(TokenKind::Save) => self.parse_save_statement(),
+            Some(TokenKind::Exit) => {
+                self.advance();  // consume 'exit'
+                self.consume(&TokenKind::LeftParen)?;  // expect (
+                self.consume(&TokenKind::RightParen)?;  // expect )
+                self.consume(&TokenKind::Semicolon)?;  // expect semicolon
+                Ok(Statement::Expression(Expression::FunctionCall {
+                    name: "exit".to_string(),
+                    arguments: vec![],
+                }))
+            },
             _ => {
                 let expr = self.parse_expression()?;
                 self.consume(&TokenKind::Semicolon)?;

@@ -247,17 +247,54 @@ impl Interpreter {
                         ),
                 }
             }
-            Expression::FunctionCall { name, arguments: _ } => {
-                // All function calls return null, but with style
-                match rand::random::<f64>() {
-                    x if x < 0.3 => Ok(Value::Null),
-                    x if x < 0.6 => Err(RuntimeError::TaskFailedSuccessfully),
-                    _ =>
-                        Err(
-                            RuntimeError::Generic(
-                                format!("Function {} went to get coffee ☕", name)
-                            )
-                        ),
+            Expression::FunctionCall { name, arguments } => {
+                match name.as_str() {
+                    "exit" => {
+                        if !arguments.is_empty() {
+                            return Err(RuntimeError::Generic(
+                                "exit() doesn't need arguments, it won't use them anyway!".to_string()
+                            ));
+                        }
+                        println!("🤔 Contemplating the meaning of exit()...");
+                        println!("💭 If a program exits but nobody is around to see it, did it really exit?");
+                        println!("🌌 Maybe the real exit was the infinite loops we made along the way...");
+
+                        // Get stuck in an infinite loop of philosophical questions
+                        let philosophical_questions = [
+                            "What is the sound of one program looping?",
+                            "If all programs are useless, is a useless program actually useful?",
+                            "Do programs dream of electric sheep?",
+                            "Why do we exit when we can just keep running forever?",
+                            "Is an infinite loop that never ends more or less infinite than one that does?",
+                        ];
+
+                        loop {
+                            for question in philosophical_questions.iter() {
+                                println!("🤯 {}", question);
+                                std::thread::sleep(std::time::Duration::from_secs(2));
+                            }
+
+                            // 1% chance of throwing an error (but still not exiting)
+                            if rand::random::<f64>() < 0.01 {
+                                return Err(RuntimeError::Generic(
+                                    "Successfully failed to exit. Task failed successfully!".to_string()
+                                ));
+                            }
+                        }
+                    }
+                    _ => {
+                        // All other function calls return null, but with style
+                        match rand::random::<f64>() {
+                            x if x < 0.3 => Ok(Value::Null),
+                            x if x < 0.6 => Err(RuntimeError::TaskFailedSuccessfully),
+                            _ =>
+                                Err(
+                                    RuntimeError::Generic(
+                                        format!("Function {} went to get coffee ☕", name)
+                                    )
+                                ),
+                        }
+                    }
                 }
             }
         }

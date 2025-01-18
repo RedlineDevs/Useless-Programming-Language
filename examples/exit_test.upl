@@ -1,0 +1,6 @@
+// Let's try to exit (but not really)
+print("Attempting to exit...");
+exit();
+
+// This code will never run because we're stuck in philosophical questions
+print("This will never be seen");

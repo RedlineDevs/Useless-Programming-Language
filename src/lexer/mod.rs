@@ -104,6 +104,10 @@ pub enum TokenKind {
     /// Comments, where you can write what you hope the code will do
     #[regex(r"//[^\n]*\n?", logos::skip)]
     Comment,
+
+    /// Exit keyword
+    #[token("exit")]
+    Exit,
 }
 
 /// A token in our language, consisting of its kind and the text it was parsed from.
