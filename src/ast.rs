@@ -24,6 +24,12 @@ pub enum Literal {
     Number(i64),
     /// A boolean literal, which might become a string of party emojis
     Boolean(bool),
+    /// An array literal, which might randomly shuffle or lose elements
+    Array(Vec<Box<Expression>>),
+    /// An object literal, which might swap keys or values
+    Object(Vec<(String, Box<Expression>)>),
+    /// Null, which might become not null
+    Null,
 }
 
 /// Binary operators that do the opposite of what you'd expect.
@@ -33,6 +39,14 @@ pub enum BinaryOp {
     Add,
     /// Divides when you want to multiply
     Multiply,
+    /// Array access that might return random element
+    Index,
+    /// Object access that might return wrong field
+    Access,
+    /// Equality that might be random
+    Equals,
+    /// Less than that might be greater than
+    LessThan,
 }
 
 /// Expressions that may or may not evaluate to what you expect.
@@ -58,6 +72,25 @@ pub enum Expression {
         /// Arguments that might be ignored
         #[allow(dead_code)]
         arguments: Vec<Expression>,
+    },
+    /// Array or object access that might return random elements
+    Access {
+        /// The array or object to access
+        object: Box<Expression>,
+        /// The key or index to access
+        key: Box<Expression>,
+    },
+    /// Promise that might resolve at random times
+    Promise {
+        /// The expression to evaluate
+        value: Box<Expression>,
+        /// Optional timeout in milliseconds
+        timeout: Option<Box<Expression>>,
+    },
+    /// Async/await expressions that might delay randomly
+    Await {
+        /// The promise to await
+        promise: Box<Expression>,
     },
 }
 
@@ -99,6 +132,29 @@ pub enum Statement {
     },
     /// A standalone expression
     Expression(Expression),
+    /// Async function declaration
+    AsyncFunction {
+        /// The name of the function
+        name: String,
+        /// Parameters of the function
+        parameters: Vec<String>,
+        /// The body of the function
+        body: Vec<Statement>,
+    },
+    /// Try-catch that might catch the wrong error
+    TryCatch {
+        /// The body to try
+        try_block: Vec<Statement>,
+        /// The error variable name
+        error_var: String,
+        /// The catch block
+        catch_block: Vec<Statement>,
+    },
+    /// Await statement for async operations
+    Await {
+        /// The promise to await
+        expression: Expression,
+    },
 }
 
 /// A complete Useless program, ready to misbehave.

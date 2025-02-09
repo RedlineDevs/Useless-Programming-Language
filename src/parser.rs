@@ -87,6 +87,71 @@ impl Parser {
                     arguments: vec![],
                 }))
             },
+            Some(TokenKind::Async) => {
+                self.advance(); // consume async
+                let name = match self.advance() {
+                    Some(token) if token.kind == TokenKind::Identifier => token.text,
+                    _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+                };
+
+                self.consume(&TokenKind::LeftParen)?;
+                let mut parameters = Vec::new();
+                while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightParen) {
+                    match self.advance() {
+                        Some(token) if token.kind == TokenKind::Identifier => {
+                            parameters.push(token.text);
+                        },
+                        _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+                    }
+                    if self.peek().map(|t| &t.kind) == Some(&TokenKind::Comma) {
+                        self.advance(); // consume comma
+                    }
+                }
+                self.consume(&TokenKind::RightParen)?;
+
+                self.consume(&TokenKind::LeftBrace)?;
+                let mut body = Vec::new();
+                while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
+                    body.push(self.parse_statement()?);
+                }
+                self.consume(&TokenKind::RightBrace)?;
+
+                Ok(Statement::AsyncFunction { name, parameters, body })
+            },
+            Some(TokenKind::Try) => {
+                self.advance(); // consume try
+                self.consume(&TokenKind::LeftBrace)?;
+                let mut try_block = Vec::new();
+                while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
+                    try_block.push(self.parse_statement()?);
+                }
+                self.consume(&TokenKind::RightBrace)?;
+
+                self.consume(&TokenKind::Catch)?;
+                let error_var = match self.advance() {
+                    Some(token) if token.kind == TokenKind::Identifier => token.text,
+                    _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+                };
+
+                self.consume(&TokenKind::LeftBrace)?;
+                let mut catch_block = Vec::new();
+                while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
+                    catch_block.push(self.parse_statement()?);
+                }
+                self.consume(&TokenKind::RightBrace)?;
+
+                Ok(Statement::TryCatch {
+                    try_block,
+                    error_var,
+                    catch_block,
+                })
+            },
+            Some(TokenKind::Await) => {
+                self.advance(); // consume await
+                let expression = self.parse_expression()?;
+                self.consume(&TokenKind::Semicolon)?;
+                Ok(Statement::Await { expression })
+            },
             _ => {
                 let expr = self.parse_expression()?;
                 self.consume(&TokenKind::Semicolon)?;
@@ -105,7 +170,7 @@ impl Parser {
             }
         };
 
-        self.consume(&TokenKind::Equals)?;
+        self.consume(&TokenKind::Assignment)?;
         let value = self.parse_expression()?;
         self.consume(&TokenKind::Semicolon)?;
 
@@ -175,6 +240,122 @@ impl Parser {
                     Ok(Expression::Identifier(name))
                 }
             }
+            Some(TokenKind::LeftBracket) => {
+                self.advance(); // consume [
+                let mut elements = Vec::new();
+
+                while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBracket) {
+                    elements.push(Box::new(self.parse_expression()?));
+                    if self.peek().map(|t| &t.kind) == Some(&TokenKind::Comma) {
+                        self.advance(); // consume comma
+                    }
+                }
+
+                self.consume(&TokenKind::RightBracket)?;
+                Ok(Expression::Literal(Literal::Array(elements)))
+            },
+            Some(TokenKind::LeftBrace) => {
+                self.advance(); // consume {
+                let mut pairs = Vec::new();
+
+                while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
+                    let key = match self.advance() {
+                        Some(token) if token.kind == TokenKind::StringLiteral => {
+                            token.text.trim_matches('"').to_string()
+                        },
+                        _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+                    };
+
+                    self.consume(&TokenKind::Colon)?;
+                    let value = Box::new(self.parse_expression()?);
+                    pairs.push((key, value));
+
+                    if self.peek().map(|t| &t.kind) == Some(&TokenKind::Comma) {
+                        self.advance(); // consume comma
+                    }
+                }
+
+                self.consume(&TokenKind::RightBrace)?;
+                Ok(Expression::Literal(Literal::Object(pairs)))
+            },
+            Some(TokenKind::Null) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::Null))
+            },
+            Some(TokenKind::Index) => {
+                self.advance();
+                self.consume(&TokenKind::LeftParen)?;
+                let array = self.parse_expression()?;
+                self.consume(&TokenKind::Comma)?;
+                let index = self.parse_expression()?;
+                self.consume(&TokenKind::RightParen)?;
+
+                Ok(Expression::BinaryOp {
+                    op: BinaryOp::Index,
+                    left: Box::new(array),
+                    right: Box::new(index),
+                })
+            },
+            Some(TokenKind::Access) => {
+                self.advance();
+                self.consume(&TokenKind::LeftParen)?;
+                let object = Box::new(self.parse_expression()?);
+                self.consume(&TokenKind::Comma)?;
+                let key = Box::new(self.parse_expression()?);
+                self.consume(&TokenKind::RightParen)?;
+
+                Ok(Expression::Access { object, key })
+            },
+            Some(TokenKind::Equals) => {
+                self.advance();
+                self.consume(&TokenKind::LeftParen)?;
+                let left = self.parse_expression()?;
+                self.consume(&TokenKind::Comma)?;
+                let right = self.parse_expression()?;
+                self.consume(&TokenKind::RightParen)?;
+
+                Ok(Expression::BinaryOp {
+                    op: BinaryOp::Equals,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                })
+            },
+            Some(TokenKind::LessThan) => {
+                self.advance();
+                self.consume(&TokenKind::LeftParen)?;
+                let left = self.parse_expression()?;
+                self.consume(&TokenKind::Comma)?;
+                let right = self.parse_expression()?;
+                self.consume(&TokenKind::RightParen)?;
+
+                Ok(Expression::BinaryOp {
+                    op: BinaryOp::LessThan,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                })
+            },
+            Some(TokenKind::Promise) => {
+                self.advance();
+                self.consume(&TokenKind::LeftParen)?;
+                let value = Box::new(self.parse_expression()?);
+                let timeout = if self.peek().map(|t| &t.kind) == Some(&TokenKind::Comma) {
+                    self.advance(); // consume comma
+                    Some(Box::new(self.parse_expression()?))
+                } else {
+                    None
+                };
+                self.consume(&TokenKind::RightParen)?;
+
+                Ok(Expression::Promise { value, timeout })
+            },
+            Some(TokenKind::Await) => {
+                self.advance();
+                self.consume(&TokenKind::LeftParen)?;
+                let promise = Box::new(self.parse_expression()?);
+                self.consume(&TokenKind::RightParen)?;
+
+                Ok(Expression::Await { promise })
+            },
             _ => Err(ParseError::UnexpectedToken(
                 self.peek()
                     .cloned()

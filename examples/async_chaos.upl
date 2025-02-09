@@ -1,0 +1,41 @@
+// Example of async chaos in the Useless Programming Language
+
+// Array that might lose elements
+let numbers = [1, 2, 3, 4, 5];
+
+// Object that might swap keys
+let config = {
+    "timeout": 1000,
+    "retries": 3,
+    "message": "Hello, World!"
+};
+
+// Try accessing array elements (they might be random)
+let first = index(numbers, 0);
+let third = index(numbers, 2);
+
+// Try accessing object fields (they might be wrong)
+let timeout = access(config, "timeout");
+let message = access(config, "message");
+
+// Compare values (results might be random)
+let isEqual = equals(first, third);
+let isLess = lessThan(first, third);
+
+// Async function that might go fishing
+async processData(data) {
+    try {
+        // Create a promise that might never resolve
+        let result = promise(data, timeout);
+
+        // Await the promise (it might change its mind)
+        await result;
+
+        print("Data processed successfully!");
+    } catch error {
+        print(error);
+    }
+}
+
+// Call the async function
+processData(42);

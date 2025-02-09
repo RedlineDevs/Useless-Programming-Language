@@ -5,7 +5,7 @@
 //!
 //! ## Example
 //! ```rust
-//! use useless_lang::lexer::Lexer;
+//! use useless_lang::lexer::{Lexer, Token};
 //!
 //! let input = "print(\"Hello, World!\");";
 //! let lexer = Lexer::new(input);
@@ -72,7 +72,7 @@ pub enum TokenKind {
 
     /// Equals sign, for assignments that might not stick
     #[token("=")]
-    Equals,
+    Assignment,
 
     /// Comma, the separator of things that shouldn't be together
     #[token(",")]
@@ -108,6 +108,58 @@ pub enum TokenKind {
     /// Exit keyword
     #[token("exit")]
     Exit,
+
+    /// Left bracket for arrays that might lose elements
+    #[token("[")]
+    LeftBracket,
+
+    /// Right bracket for arrays that might have lost elements
+    #[token("]")]
+    RightBracket,
+
+    /// Colon for object key-value pairs that might swap
+    #[token(":")]
+    Colon,
+
+    /// Null keyword for values that might not be null
+    #[token("null")]
+    Null,
+
+    /// Index operation that might return random elements
+    #[token("index")]
+    Index,
+
+    /// Access operation that might return wrong fields
+    #[token("access")]
+    Access,
+
+    /// Equals operation that might be random
+    #[token("equals")]
+    Equals,
+
+    /// Less than operation that might be greater than
+    #[token("lessThan")]
+    LessThan,
+
+    /// Promise keyword for operations that might never resolve
+    #[token("promise")]
+    Promise,
+
+    /// Await keyword for promises that might change their mind
+    #[token("await")]
+    Await,
+
+    /// Async keyword for functions that might go fishing
+    #[token("async")]
+    Async,
+
+    /// Try keyword for blocks that might catch the wrong error
+    #[token("try")]
+    Try,
+
+    /// Catch keyword for errors that might not have happened
+    #[token("catch")]
+    Catch,
 }
 
 /// A token in our language, consisting of its kind and the text it was parsed from.
@@ -192,9 +244,125 @@ mod tests {
             vec![
                 Token::new(TokenKind::Let, "let".to_string()),
                 Token::new(TokenKind::Identifier, "x".to_string()),
-                Token::new(TokenKind::Equals, "=".to_string()),
+                Token::new(TokenKind::Assignment, "=".to_string()),
                 Token::new(TokenKind::NumberLiteral, "42".to_string()),
                 Token::new(TokenKind::Semicolon, ";".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn test_array_and_object_literals() {
+        let input = "[1, 2, 3] {\"key\": 42}";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<Token> = lexer.collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::new(TokenKind::LeftBracket, "[".to_string()),
+                Token::new(TokenKind::NumberLiteral, "1".to_string()),
+                Token::new(TokenKind::Comma, ",".to_string()),
+                Token::new(TokenKind::NumberLiteral, "2".to_string()),
+                Token::new(TokenKind::Comma, ",".to_string()),
+                Token::new(TokenKind::NumberLiteral, "3".to_string()),
+                Token::new(TokenKind::RightBracket, "]".to_string()),
+                Token::new(TokenKind::LeftBrace, "{".to_string()),
+                Token::new(TokenKind::StringLiteral, "\"key\"".to_string()),
+                Token::new(TokenKind::Colon, ":".to_string()),
+                Token::new(TokenKind::NumberLiteral, "42".to_string()),
+                Token::new(TokenKind::RightBrace, "}".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_binary_operations() {
+        let input = "index(arr, 0) access(obj, \"key\") equals(1, 1) lessThan(1, 2)";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<Token> = lexer.collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::new(TokenKind::Index, "index".to_string()),
+                Token::new(TokenKind::LeftParen, "(".to_string()),
+                Token::new(TokenKind::Identifier, "arr".to_string()),
+                Token::new(TokenKind::Comma, ",".to_string()),
+                Token::new(TokenKind::NumberLiteral, "0".to_string()),
+                Token::new(TokenKind::RightParen, ")".to_string()),
+                Token::new(TokenKind::Access, "access".to_string()),
+                Token::new(TokenKind::LeftParen, "(".to_string()),
+                Token::new(TokenKind::Identifier, "obj".to_string()),
+                Token::new(TokenKind::Comma, ",".to_string()),
+                Token::new(TokenKind::StringLiteral, "\"key\"".to_string()),
+                Token::new(TokenKind::RightParen, ")".to_string()),
+                Token::new(TokenKind::Equals, "equals".to_string()),
+                Token::new(TokenKind::LeftParen, "(".to_string()),
+                Token::new(TokenKind::NumberLiteral, "1".to_string()),
+                Token::new(TokenKind::Comma, ",".to_string()),
+                Token::new(TokenKind::NumberLiteral, "1".to_string()),
+                Token::new(TokenKind::RightParen, ")".to_string()),
+                Token::new(TokenKind::LessThan, "lessThan".to_string()),
+                Token::new(TokenKind::LeftParen, "(".to_string()),
+                Token::new(TokenKind::NumberLiteral, "1".to_string()),
+                Token::new(TokenKind::Comma, ",".to_string()),
+                Token::new(TokenKind::NumberLiteral, "2".to_string()),
+                Token::new(TokenKind::RightParen, ")".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_async_features() {
+        let input = "async fn() { await promise(42, 1000); }";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<Token> = lexer.collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::new(TokenKind::Async, "async".to_string()),
+                Token::new(TokenKind::Identifier, "fn".to_string()),
+                Token::new(TokenKind::LeftParen, "(".to_string()),
+                Token::new(TokenKind::RightParen, ")".to_string()),
+                Token::new(TokenKind::LeftBrace, "{".to_string()),
+                Token::new(TokenKind::Await, "await".to_string()),
+                Token::new(TokenKind::Promise, "promise".to_string()),
+                Token::new(TokenKind::LeftParen, "(".to_string()),
+                Token::new(TokenKind::NumberLiteral, "42".to_string()),
+                Token::new(TokenKind::Comma, ",".to_string()),
+                Token::new(TokenKind::NumberLiteral, "1000".to_string()),
+                Token::new(TokenKind::RightParen, ")".to_string()),
+                Token::new(TokenKind::Semicolon, ";".to_string()),
+                Token::new(TokenKind::RightBrace, "}".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_error_handling() {
+        let input = "try { null; } catch err { print(err); }";
+        let lexer = Lexer::new(input);
+        let tokens: Vec<Token> = lexer.collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::new(TokenKind::Try, "try".to_string()),
+                Token::new(TokenKind::LeftBrace, "{".to_string()),
+                Token::new(TokenKind::Null, "null".to_string()),
+                Token::new(TokenKind::Semicolon, ";".to_string()),
+                Token::new(TokenKind::RightBrace, "}".to_string()),
+                Token::new(TokenKind::Catch, "catch".to_string()),
+                Token::new(TokenKind::Identifier, "err".to_string()),
+                Token::new(TokenKind::LeftBrace, "{".to_string()),
+                Token::new(TokenKind::Print, "print".to_string()),
+                Token::new(TokenKind::LeftParen, "(".to_string()),
+                Token::new(TokenKind::Identifier, "err".to_string()),
+                Token::new(TokenKind::RightParen, ")".to_string()),
+                Token::new(TokenKind::Semicolon, ";".to_string()),
+                Token::new(TokenKind::RightBrace, "}".to_string()),
             ]
         );
     }

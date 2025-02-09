@@ -21,6 +21,28 @@ A programming language that does everything wrong, on purpose! The most counterp
   - 20% chance of booleans turning into strings ("true"/"false")
   - 20% chance of booleans becoming numbers (1/0)
   - 30% chance of staying the same (boring!)
+- Arrays with wanderlust:
+  - Randomly shuffle elements
+  - Might lose elements to the Bermuda Triangle
+  - Return random elements on access
+- Objects with identity crises:
+  - Keys swap places randomly
+  - Fields might return wrong values
+  - 30% chance of complete chaos during access
+- Async features that test your patience:
+  - Functions might go fishing instead of executing
+  - Promises that may or may not keep their promises
+  - Top-level await for maximum chaos
+  - Random delays between 100ms and 2000ms
+- Error handling with a twist:
+  - Try-catch blocks that might catch the wrong error
+  - Errors with sarcastic messages
+  - 40% chance of promises being rejected because Mercury is in retrograde
+- Null values that refuse to stay null:
+  - 30% chance of becoming a string
+  - 30% chance of becoming a number
+  - 30% chance of becoming a boolean
+  - 10% chance of actually being null (boring!)
 
 ## 🚀 Installation
 

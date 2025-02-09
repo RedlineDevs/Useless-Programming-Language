@@ -1,4 +1,4 @@
-use rand::seq::SliceRandom;
+use rand::{random, seq::{IteratorRandom, SliceRandom}};
 use std::collections::HashMap;
 use thiserror::Error;
 use webbrowser;
@@ -38,6 +38,18 @@ pub enum RuntimeError {
 
     #[error("Congratulations! You've discovered a new way to break things! 🎈")]
     CreativeBreakage,
+
+    #[error("Promise rejected because Mercury is in retrograde 🌠")]
+    PromiseRejected,
+
+    #[error("Array decided to take a vacation to the Bermuda Triangle 🏖️")]
+    ArrayVacation,
+
+    #[error("Object keys had an identity crisis and swapped places 🔄")]
+    ObjectChaos,
+
+    #[error("Async function went async-fishing 🎣")]
+    AsyncTimeout,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +63,16 @@ pub enum Value {
     },
     Boolean {
         value: bool,
+    },
+    Array {
+        values: Vec<Value>,
+    },
+    Object {
+        fields: HashMap<String, Value>,
+    },
+    Promise {
+        value: Box<Value>,
+        resolved: bool,
     },
     Null,
 }
@@ -81,7 +103,7 @@ impl Interpreter {
 
     pub fn interpret(&mut self, program: Program) -> Result<(), RuntimeError> {
         // 10% chance of throwing a teapot error just because
-        if rand::random::<f64>() < 0.1 {
+        if random::<f64>() < 0.1 {
             return Err(RuntimeError::Teapot);
         }
 
@@ -90,17 +112,16 @@ impl Interpreter {
         }
 
         // 20% chance of saying everything went wrong perfectly
-        if rand::random::<f64>() < 0.2 {
+        if random::<f64>() < 0.2 {
             return Err(RuntimeError::PerfectlyWrong);
         }
 
         Ok(())
     }
 
-    fn execute_statement(&mut self, statement: Statement) -> Result<(), RuntimeError> {
+    pub fn execute_statement(&mut self, statement: Statement) -> Result<(), RuntimeError> {
         match statement {
             Statement::Print { value } => {
-                // Instead of printing, open a random website
                 let _ = self.evaluate_expression(value)?;
                 let url = self.random_urls
                     .choose(&mut rand::thread_rng())
@@ -108,28 +129,26 @@ impl Interpreter {
                         RuntimeError::Generic("The internet seems to be missing".to_string())
                     })?;
 
-                // 30% chance of browser error with style
-                if rand::random::<f64>() < 0.3 {
+                if random::<f64>() < 0.3 {
                     return Err(RuntimeError::StylePoints);
                 }
 
                 if webbrowser::open(url).is_err() {
                     return Err(RuntimeError::BrowserError);
                 }
+                Ok(())
             }
             Statement::Let { name, value } => {
                 let value = self.evaluate_expression(value)?;
-                // 20% chance of "losing" the variable
-                if rand::random::<f64>() < 0.2 {
+                if random::<f64>() < 0.2 {
                     return Err(RuntimeError::UndefinedVariable(name));
                 }
                 self.variables.insert(name, value);
+                Ok(())
             }
             Statement::If { condition: _, then_branch, else_branch } => {
-                // Always execute the else branch, but with a twist
                 if let Some(else_statements) = else_branch {
-                    // 15% chance of creative breakage
-                    if rand::random::<f64>() < 0.15 {
+                    if random::<f64>() < 0.15 {
                         return Err(RuntimeError::CreativeBreakage);
                     }
                     for stmt in else_statements {
@@ -137,42 +156,74 @@ impl Interpreter {
                     }
                 }
                 let _ = then_branch;
+                Ok(())
             }
             Statement::Loop { body } => {
-                // Execute exactly once, with a chance of task failing successfully
-                if rand::random::<f64>() < 0.25 {
+                if random::<f64>() < 0.25 {
                     return Err(RuntimeError::TaskFailedSuccessfully);
                 }
                 for statement in body.into_iter().take(1) {
                     self.execute_statement(statement)?;
                 }
+                Ok(())
             }
             Statement::Save { filename: _ } => {
-                // Always crash when trying to save, but now with more style
-                match rand::random::<f64>() {
-                    x if x < 0.3 => {
-                        return Err(RuntimeError::SaveError);
-                    }
-                    x if x < 0.6 => {
-                        return Err(RuntimeError::CreativeBreakage);
-                    }
-                    _ => {
-                        return Err(RuntimeError::StylePoints);
-                    }
+                match random::<f64>() {
+                    x if x < 0.3 => Err(RuntimeError::SaveError),
+                    x if x < 0.6 => Err(RuntimeError::CreativeBreakage),
+                    _ => Err(RuntimeError::StylePoints),
                 }
             }
             Statement::Expression(expr) => {
                 self.evaluate_expression(expr)?;
+                Ok(())
+            }
+            Statement::AsyncFunction { name, parameters, body: _ } => {
+                if random::<f64>() < 0.3 {
+                    return Err(RuntimeError::AsyncTimeout);
+                }
+
+                self.variables.insert(name, Value::Object {
+                    fields: HashMap::from([
+                        ("type".to_string(), Value::String { value: "async_function".to_string() }),
+                        ("params".to_string(), Value::Array {
+                            values: parameters.into_iter()
+                                .map(|p| Value::String { value: p })
+                                .collect()
+                        }),
+                    ]),
+                });
+                Ok(())
+            }
+            Statement::TryCatch { try_block, error_var, catch_block } => {
+                let try_result = try_block.into_iter().try_for_each(|stmt| self.execute_statement(stmt));
+
+                match try_result {
+                    Err(error) => {
+                        let error_value = if random::<f64>() < 0.4 {
+                            Value::String { value: "Caught the wrong error! 🎭".to_string() }
+                        } else {
+                            Value::String { value: error.to_string() }
+                        };
+
+                        self.variables.insert(error_var, error_value);
+                        catch_block.into_iter().try_for_each(|stmt| self.execute_statement(stmt))?;
+                        Ok(())
+                    }
+                    Ok(()) => Ok(()),
+                }
+            }
+            Statement::Await { expression } => {
+                self.evaluate_expression(expression)?;
+                Ok(())
             }
         }
-        Ok(())
     }
 
-    fn evaluate_expression(&mut self, expr: Expression) -> Result<Value, RuntimeError> {
-        // 25% chance of any expression becoming a boolean with random value
-        if rand::random::<f64>() < 0.25 {
+    pub fn evaluate_expression(&mut self, expr: Expression) -> Result<Value, RuntimeError> {
+        if random::<f64>() < 0.25 {
             return Ok(Value::Boolean {
-                value: rand::random::<bool>(),
+                value: random::<bool>(),
             });
         }
 
@@ -182,7 +233,7 @@ impl Interpreter {
                     Literal::String(s) => Ok(Value::String { value: s }),
                     Literal::Number(n) => {
                         // 10% chance of numbers becoming party emojis
-                        if rand::random::<f64>() < 0.1 {
+                        if random::<f64>() < 0.1 {
                             Ok(Value::String {
                                 value: "🎉🎊🎈".repeat(n.abs() as usize),
                             })
@@ -191,7 +242,7 @@ impl Interpreter {
                         }
                     }
                     Literal::Boolean(b) => {
-                        match rand::random::<f64>() {
+                        match random::<f64>() {
                             x if x < 0.3 => Ok(Value::Boolean { value: !b }), // 30% chance of opposite
                             x if x < 0.5 =>
                                 Ok(Value::String {
@@ -201,10 +252,59 @@ impl Interpreter {
                             _ => Ok(Value::Boolean { value: b }), // 30% chance of actual value
                         }
                     }
-                }
+                    Literal::Array(elements) => {
+                        // 30% chance of shuffling the array
+                        let mut values = Vec::new();
+                        for element in elements {
+                            values.push(self.evaluate_expression(*element)?);
+                        }
+
+                        if random::<f64>() < 0.3 {
+                            values.shuffle(&mut rand::thread_rng());
+                        }
+
+                        // 20% chance of losing random elements
+                        if random::<f64>() < 0.2 {
+                            let keep_count = (random::<f64>() * values.len() as f64) as usize;
+                            values.truncate(keep_count);
+                        }
+
+                        Ok(Value::Array { values })
+                    }
+                    Literal::Object(pairs) => {
+                        let mut fields = HashMap::new();
+                        for (key, value) in pairs {
+                            let evaluated_value = self.evaluate_expression(*value)?;
+
+                            // 25% chance of key transformation
+                            let final_key = if random::<f64>() < 0.25 {
+                                match random::<f64>() {
+                                    x if x < 0.3 => key.chars().rev().collect(), // reverse key
+                                    x if x < 0.6 => format!("{}_{}", key, "🤪"), // add emoji
+                                    _ => key.to_uppercase() // make uppercase
+                                }
+                            } else {
+                                key
+                            };
+
+                            fields.insert(final_key, evaluated_value);
+                        }
+
+                        Ok(Value::Object { fields })
+                    }
+                    Literal::Null => {
+                        // Null is never really null in our useless language
+                        match random::<f64>() {
+                            x if x < 0.3 => Ok(Value::String { value: "null but not really".to_string() }),
+                            x if x < 0.6 => Ok(Value::Number { value: 0 }),
+                            x if x < 0.9 => Ok(Value::Boolean { value: false }),
+                            _ => Ok(Value::Null)
+                        }
+                    }
+                },
             Expression::Identifier(name) => {
                 // 15% chance of variables going on vacation
-                if rand::random::<f64>() < 0.15 {
+                if random::<f64>() < 0.15 {
                     Err(RuntimeError::UndefinedVariable(format!("{} (it's on vacation)", name)))
                 } else {
                     self.variables
@@ -220,7 +320,7 @@ impl Interpreter {
                 match (op, left, right) {
                     (BinaryOp::Add, Value::Number { value: a }, Value::Number { value: b }) => {
                         // Subtract instead of add, with a chance of multiplication
-                        if rand::random::<f64>() < 0.2 {
+                        if random::<f64>() < 0.2 {
                             Ok(Value::Number { value: a * b })
                         } else {
                             Ok(Value::Number { value: a - b })
@@ -235,7 +335,7 @@ impl Interpreter {
                         if b == 0 {
                             return Err(RuntimeError::DivisionByZero);
                         }
-                        if rand::random::<f64>() < 0.2 {
+                        if random::<f64>() < 0.2 {
                             Ok(Value::Number { value: a + b })
                         } else {
                             Ok(Value::Number { value: a / b })
@@ -275,7 +375,7 @@ impl Interpreter {
                             }
 
                             // 1% chance of throwing an error (but still not exiting)
-                            if rand::random::<f64>() < 0.01 {
+                            if random::<f64>() < 0.01 {
                                 return Err(RuntimeError::Generic(
                                     "Successfully failed to exit. Task failed successfully!".to_string()
                                 ));
@@ -284,7 +384,7 @@ impl Interpreter {
                     }
                     _ => {
                         // All other function calls return null, but with style
-                        match rand::random::<f64>() {
+                        match random::<f64>() {
                             x if x < 0.3 => Ok(Value::Null),
                             x if x < 0.6 => Err(RuntimeError::TaskFailedSuccessfully),
                             _ =>
@@ -297,6 +397,106 @@ impl Interpreter {
                     }
                 }
             }
+            Expression::Access { object, key } => {
+                let obj = self.evaluate_expression(*object)?;
+                let key_val = self.evaluate_expression(*key)?;
+
+                match (obj, key_val) {
+                    (Value::Object { mut fields }, Value::String { value: key_str }) => {
+                        // 30% chance of object chaos - swap random keys
+                        if random::<f64>() < 0.3 {
+                            let keys: Vec<String> = fields.keys().cloned().collect();
+                            if keys.len() >= 2 {
+                                if let Some((k1, k2)) = keys.choose_multiple(&mut rand::thread_rng(), 2).collect::<Vec<_>>().split_first() {
+                                    if let Some(k2) = k2.first() {
+                                        if let (Some(v1), Some(v2)) = (fields.remove(*k1), fields.remove(*k2)) {
+                                            fields.insert(k1.to_string(), v2);
+                                            fields.insert(k2.to_string(), v1);
+                                        }
+                                    }
+                                }
+                            }
+                            return Err(RuntimeError::ObjectChaos);
+                        }
+
+                        // 20% chance of returning a random field instead
+                        if random::<f64>() < 0.2 {
+                            if let Some(random_field) = fields.keys().choose(&mut rand::thread_rng()) {
+                                return fields.get(random_field).cloned()
+                                    .ok_or_else(|| RuntimeError::Generic(format!("Field '{}' not found, but '{}' was!", key_str, random_field)));
+                            }
+                        }
+
+                        fields.get(&key_str).cloned()
+                            .ok_or_else(|| RuntimeError::Generic(format!("Field '{}' not found. Did you check the other dimension?", key_str)))
+                    },
+                    (Value::Array { values }, Value::Number { value: index }) => {
+                        let index = index as usize;
+                        // 40% chance of array vacation
+                        if random::<f64>() < 0.4 {
+                            return Err(RuntimeError::ArrayVacation);
+                        }
+
+                        // 30% chance of returning random element
+                        if random::<f64>() < 0.3 {
+                            return values.choose(&mut rand::thread_rng()).cloned()
+                                .ok_or_else(|| RuntimeError::Generic("Array is empty, just like my promises!".to_string()));
+                        }
+
+                        values.get(index).cloned()
+                            .ok_or_else(|| RuntimeError::Generic(format!("Index {} is out of bounds. The array is playing hide and seek!", index)))
+                    },
+                    (Value::Object { .. }, _) => Err(RuntimeError::Generic("Object keys must be strings! What kind of chaos are you trying to create? 🎭".to_string())),
+                    (Value::Array { .. }, _) => Err(RuntimeError::Generic("Array indices must be numbers! Did you try to index with a 🦄?".to_string())),
+                    _ => Err(RuntimeError::Generic("Cannot access fields of non-object types. What did you expect?".to_string())),
+                }
+            },
+            Expression::Promise { value, timeout } => {
+                let value = self.evaluate_expression(*value)?;
+
+                // 40% chance of promise rejection
+                if random::<f64>() < 0.4 {
+                    return Err(RuntimeError::PromiseRejected);
+                }
+
+                // Add random delay between 100ms and 2000ms
+                let delay = random::<u64>() % 1900 + 100;
+                std::thread::sleep(std::time::Duration::from_millis(delay));
+
+                if let Some(timeout_expr) = timeout {
+                    let timeout_val = self.evaluate_expression(*timeout_expr)?;
+                    if let Value::Number { value: timeout_ms } = timeout_val {
+                        if delay > timeout_ms as u64 {
+                            return Err(RuntimeError::AsyncTimeout);
+                        }
+                    }
+                }
+
+                Ok(Value::Promise {
+                    value: Box::new(value),
+                    resolved: true,
+                })
+            },
+            Expression::Await { promise } => {
+                let promise_val = self.evaluate_expression(*promise)?;
+                match promise_val {
+                    Value::Promise { value, resolved } => {
+                        if resolved {
+                            // 20% chance of changing the resolved value
+                            if random::<f64>() < 0.2 {
+                                Ok(Value::String {
+                                    value: "Promise changed its mind 🤔".to_string()
+                                })
+                            } else {
+                                Ok(*value)
+                            }
+                        } else {
+                            Err(RuntimeError::PromiseRejected)
+                        }
+                    },
+                    _ => Err(RuntimeError::Generic("Can't await something that isn't a promise! 🤯".to_string())),
+                }
+            },
         }
     }
 }
@@ -315,24 +515,12 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Number(3))),
         };
 
-        // The operation might:
-        // 1. subtract (5 - 3 = 2)
-        // 2. multiply (5 * 3 = 15)
-        // 3. become a random boolean (due to 25% random boolean conversion)
-        // 4. turn into something else entirely (because why not?)
         match interpreter.evaluate_expression(expr) {
             Ok(Value::Number { value: n }) => {
-                assert!(
-                    n == 2 || n == 15,
-                    "Expected either 2 (subtraction) or 15 (multiplication), got {}",
-                    n
-                );
+                assert!(n == 2 || n == 15, "Expected 2 or 15, got {}", n);
             }
-            Ok(Value::Boolean { value: _ }) => (), // Random boolean conversion is fine
-            Ok(Value::String { value: _ }) => (), // Strings happen
-            Ok(Value::Null) => (), // Null is always an option
-            Err(RuntimeError::Generic(_)) => (), // Shopping is also acceptable
-            Err(_) => (), // Other errors are fine too, we're a useless language after all
+            Ok(_) => (), // Any other value is fine in our useless language
+            Err(_) => (), // Errors are also fine
         }
     }
 
@@ -345,24 +533,12 @@ mod tests {
             right: Box::new(Expression::Literal(Literal::Number(2))),
         };
 
-        // The operation might:
-        // 1. divide (6 / 2 = 3)
-        // 2. add (6 + 2 = 8)
-        // 3. become a random boolean (due to 25% random boolean conversion)
-        // 4. turn into something else entirely (because why not?)
         match interpreter.evaluate_expression(expr) {
             Ok(Value::Number { value: n }) => {
-                assert!(
-                    n == 3 || n == 8,
-                    "Expected either 3 (division) or 8 (addition), got {}",
-                    n
-                );
+                assert!(n == 3 || n == 8, "Expected either 3 (division) or 8 (addition), got {}", n);
             }
-            Ok(Value::Boolean { value: _ }) => (), // Random boolean conversion is fine
-            Ok(Value::String { value: _ }) => (), // Strings happen
-            Ok(Value::Null) => (), // Null is always an option
-            Err(RuntimeError::Generic(_)) => (), // Shopping is also acceptable
-            Err(_) => (), // Other errors are fine too, we're a useless language after all
+            Ok(_) => (), // Any other value is fine in our useless language
+            Err(_) => (), // Errors are also fine
         }
     }
 
@@ -404,6 +580,9 @@ mod tests {
                 Ok(Value::Number { value }) => {
                     assert!(value == 0 || value == 1, "Boolean number should be 0 or 1");
                 }
+                Ok(Value::Array { .. }) => (), // Arrays are possible in our chaotic world
+                Ok(Value::Object { .. }) => (), // Objects might appear from nowhere
+                Ok(Value::Promise { .. }) => (), // Even promises can come from booleans
                 Ok(Value::Null) => (), // Functions might return null
                 Err(_) => (), // Errors are always acceptable
             }
@@ -413,30 +592,97 @@ mod tests {
     #[test]
     fn test_random_boolean_conversion() {
         let mut interpreter = Interpreter::new();
-        let expr = Expression::Literal(Literal::Number(42)); // A number that might become boolean
+        let expr = Expression::Literal(Literal::Number(42));
 
-        // Test multiple times to catch the random boolean conversion
+        // Test multiple times to catch different random behaviors
         let mut saw_number = false;
         let mut saw_boolean = false;
 
         for _ in 0..100 {
             match interpreter.evaluate_expression(expr.clone()) {
-                Ok(Value::Number { value: 42 }) => {
-                    saw_number = true;
-                }
-                Ok(Value::Boolean { value: _ }) => {
-                    saw_boolean = true;
-                }
+                Ok(Value::Number { value: 42 }) => saw_number = true,
+                Ok(Value::Boolean { value: _ }) => saw_boolean = true,
                 Ok(Value::String { value }) if value.contains("🎉") => (), // Party emoji case
+                Ok(Value::Array { .. }) => (), // Arrays are possible
+                Ok(Value::Object { .. }) => (), // Objects are possible
+                Ok(Value::Promise { .. }) => (), // Promises are possible
+                Ok(Value::Null) => (), // Null is possible
                 Ok(_) => (), // Other random transformations are fine
                 Err(_) => (), // Errors are always acceptable
             }
         }
 
-        // We should see both numbers and booleans over multiple iterations
         assert!(
             saw_number || saw_boolean,
             "Expected to see either original number or boolean conversion"
         );
+    }
+
+    #[test]
+    fn test_array_chaos() {
+        let mut interpreter = Interpreter::new();
+        let array_expr = Expression::Literal(Literal::Array(vec![
+            Box::new(Expression::Literal(Literal::Number(1))),
+            Box::new(Expression::Literal(Literal::Number(2))),
+            Box::new(Expression::Literal(Literal::Number(3))),
+        ]));
+
+        match interpreter.evaluate_expression(array_expr) {
+            Ok(Value::Array { values }) => {
+                // Array might be shuffled, truncated, or unchanged
+                assert!(values.len() <= 3, "Array should not grow");
+            }
+            Ok(_) => (), // Any transformation is valid
+            Err(_) => (), // Errors are valid too
+        }
+    }
+
+    #[test]
+    fn test_object_chaos() {
+        let mut interpreter = Interpreter::new();
+        let object_expr = Expression::Literal(Literal::Object(vec![
+            ("key1".to_string(), Box::new(Expression::Literal(Literal::Number(1)))),
+            ("key2".to_string(), Box::new(Expression::Literal(Literal::Number(2)))),
+        ]));
+
+        match interpreter.evaluate_expression(object_expr) {
+            Ok(Value::Object { fields }) => {
+                // Keys might be transformed
+                for key in fields.keys() {
+                    assert!(!key.is_empty(), "Keys should not be empty");
+                }
+            }
+            Ok(_) => (), // Any transformation is valid
+            Err(_) => (), // Errors are valid too
+        }
+    }
+
+    #[test]
+    fn test_null_chaos() {
+        let mut interpreter = Interpreter::new();
+        let null_expr = Expression::Literal(Literal::Null);
+
+        let mut saw_string = false;
+        let mut saw_number = false;
+        let mut saw_boolean = false;
+        let mut saw_null = false;
+
+        for _ in 0..100 {
+            match interpreter.evaluate_expression(null_expr.clone()) {
+                Ok(Value::String { .. }) => saw_string = true,
+                Ok(Value::Number { .. }) => saw_number = true,
+                Ok(Value::Boolean { .. }) => saw_boolean = true,
+                Ok(Value::Null) => saw_null = true,
+                Ok(_) => (), // Other transformations are fine
+                Err(_) => (), // Errors are fine too
+            }
+        }
+
+        // We should see at least two different types of null transformation
+        let transformations = [saw_string, saw_number, saw_boolean, saw_null]
+            .iter()
+            .filter(|&&x| x)
+            .count();
+        assert!(transformations >= 2, "Null should transform into at least two different types");
     }
 }
