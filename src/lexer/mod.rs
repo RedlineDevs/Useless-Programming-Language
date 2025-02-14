@@ -18,6 +18,18 @@ use logos::Logos;
 /// Each one is special in its own useless way.
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum TokenKind {
+    /// Attribute directives for controlling language behavior
+    #[regex(r"#\[[a-zA-Z_][a-zA-Z0-9_]*(?:\([^)]*\))?\]")]
+    Attribute,
+
+    /// Module declaration keyword
+    #[token("mod")]
+    Module,
+
+    /// Use keyword for imports
+    #[token("use")]
+    Use,
+
     /// The print keyword, which opens random websites
     #[token("print")]
     Print,
@@ -50,96 +62,9 @@ pub enum TokenKind {
     #[token("multiply")]
     Multiply,
 
-    /// Left parenthesis, the beginning of confusion
-    #[token("(")]
-    LeftParen,
-
-    /// Right parenthesis, the end of confusion
-    #[token(")")]
-    RightParen,
-
-    /// Left brace, where dreams begin
-    #[token("{")]
-    LeftBrace,
-
-    /// Right brace, where dreams end
-    #[token("}")]
-    RightBrace,
-
-    /// Semicolon, because we need more punctuation
-    #[token(";")]
-    Semicolon,
-
-    /// Equals sign, for assignments that might not stick
-    #[token("=")]
-    Assignment,
-
-    /// Comma, the separator of things that shouldn't be together
-    #[token(",")]
-    Comma,
-
-    /// String literals, which might contain anything but what you wrote
-    #[regex("\"[^\"]*\"")]
-    StringLiteral,
-
-    /// Number literals, which might not be the number you expect
-    #[regex("[0-9]+")]
-    NumberLiteral,
-
-    /// Boolean literals, which might not be what you expect
-    #[token("true")]
-    True,
-
-    #[token("false")]
-    False,
-
-    /// Identifiers, for naming things that won't behave
-    #[regex("[a-zA-Z_][a-zA-Z0-9_]*")]
-    Identifier,
-
-    /// Whitespace and comments, the only predictable parts of the language
-    #[regex(r"[ \t\n\f]+", logos::skip)]
-    Whitespace,
-
-    /// Comments, where you can write what you hope the code will do
-    #[regex(r"//[^\n]*\n?", logos::skip)]
-    Comment,
-
     /// Exit keyword
     #[token("exit")]
     Exit,
-
-    /// Left bracket for arrays that might lose elements
-    #[token("[")]
-    LeftBracket,
-
-    /// Right bracket for arrays that might have lost elements
-    #[token("]")]
-    RightBracket,
-
-    /// Colon for object key-value pairs that might swap
-    #[token(":")]
-    Colon,
-
-    /// Null keyword for values that might not be null
-    #[token("null")]
-    Null,
-
-    /// Index operation that might return random elements
-    #[token("index")]
-    Index,
-
-    /// Access operation that might return wrong fields
-    #[token("access")]
-    Access,
-
-    /// Equals operation that might be random
-    #[token("equals")]
-    Equals,
-
-    /// Less than operation that might be greater than
-    #[token("lessThan")]
-    LessThan,
 
     /// Promise keyword for operations that might never resolve
     #[token("promise")]
@@ -160,6 +85,101 @@ pub enum TokenKind {
     /// Catch keyword for errors that might not have happened
     #[token("catch")]
     Catch,
+
+    /// Directive token for language behavior control
+    #[token("directive")]
+    Directive,
+
+    /// Index operation that might return random elements
+    #[token("index")]
+    Index,
+
+    /// Access operation that might return wrong fields
+    #[token("access")]
+    Access,
+
+    /// Equals operation that might be random
+    #[token("equals")]
+    Equals,
+
+    /// Less than operation that might be greater than
+    #[token("lessThan")]
+    LessThan,
+
+    /// Boolean literals, which might not be what you expect
+    #[token("true")]
+    True,
+
+    #[token("false")]
+    False,
+
+    /// Null keyword for values that might not be null
+    #[token("null")]
+    Null,
+
+    /// Left parenthesis, the beginning of confusion
+    #[token("(")]
+    LeftParen,
+
+    /// Right parenthesis, the end of confusion
+    #[token(")")]
+    RightParen,
+
+    /// Left brace, where dreams begin
+    #[token("{")]
+    LeftBrace,
+
+    /// Right brace, where dreams end
+    #[token("}")]
+    RightBrace,
+
+    /// Left bracket for arrays that might lose elements
+    #[token("[")]
+    LeftBracket,
+
+    /// Right bracket for arrays that might have lost elements
+    #[token("]")]
+    RightBracket,
+
+    /// Semicolon, because we need more punctuation
+    #[token(";")]
+    Semicolon,
+
+    /// Equals sign, for assignments that might not stick
+    #[token("=")]
+    Assignment,
+
+    /// Comma, the separator of things that shouldn't be together
+    #[token(",")]
+    Comma,
+
+    /// Colon for object key-value pairs that might swap
+    #[token(":")]
+    Colon,
+
+    /// Double colon token for module paths
+    #[token("::")]
+    DoubleColon,
+
+    /// String literals, which might contain anything but what you wrote
+    #[regex("\"[^\"]*\"")]
+    StringLiteral,
+
+    /// Number literals, which might not be the number you expect
+    #[regex("[0-9]+")]
+    NumberLiteral,
+
+    /// Identifiers, for naming things that won't behave
+    #[regex("[a-zA-Z_][a-zA-Z0-9_]*")]
+    Identifier,
+
+    /// Whitespace and comments, the only predictable parts of the language
+    #[regex(r"[ \t\n\f]+", logos::skip)]
+    Whitespace,
+
+    /// Comments, where you can write what you hope the code will do
+    #[regex(r"//[^\n]*\n?", logos::skip)]
+    Comment,
 }
 
 /// A token in our language, consisting of its kind and the text it was parsed from.

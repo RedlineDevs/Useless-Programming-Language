@@ -1,7 +1,11 @@
-use rand::{random, seq::{IteratorRandom, SliceRandom}};
+use rand::{random, seq::SliceRandom};
 use std::collections::HashMap;
 use thiserror::Error;
 use webbrowser;
+use std::collections::HashSet;
+use rand::Rng;
+use std::time::Duration;
+use tokio::time::sleep;
 
 use crate::ast::{ BinaryOp, Expression, Literal, Program, Statement };
 
@@ -52,7 +56,7 @@ pub enum RuntimeError {
     AsyncTimeout,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum Value {
     String {
@@ -80,6 +84,8 @@ pub enum Value {
 pub struct Interpreter {
     variables: HashMap<String, Value>,
     random_urls: Vec<String>,
+    directives: HashSet<String>,
+    is_completely_normal: bool,  // New flag for disabling all useless behavior
 }
 
 impl Interpreter {
@@ -98,46 +104,223 @@ impl Interpreter {
                 "https://thatsthefinger.com".to_string(),
                 "https://heeeeeeeey.com".to_string()
             ],
+            directives: HashSet::new(),
+            is_completely_normal: false,
         }
     }
 
+    pub fn has_directive(&self, name: &str) -> bool {
+        self.directives.contains(name)
+    }
+
     pub fn interpret(&mut self, program: Program) -> Result<(), RuntimeError> {
+        // Check for top-level directive first
+        if let Some(Statement::Directive { name }) = program.first() {
+            if name == "disable_all_useless_shit" {
+                self.is_completely_normal = true;
+                // Execute rest of program without the directive
+                for statement in program.into_iter().skip(1) {
+                    self.execute_statement(statement)?;
+                }
+                return Ok(());
+            }
+        }
+
+        // Original chaotic behavior if no top-level directive
+        if !self.is_completely_normal {
         // 10% chance of throwing a teapot error just because
         if random::<f64>() < 0.1 {
             return Err(RuntimeError::Teapot);
+            }
         }
 
         for statement in program {
             self.execute_statement(statement)?;
         }
 
+        if !self.is_completely_normal {
         // 20% chance of saying everything went wrong perfectly
         if random::<f64>() < 0.2 {
             return Err(RuntimeError::PerfectlyWrong);
+            }
         }
 
         Ok(())
     }
 
     pub fn execute_statement(&mut self, statement: Statement) -> Result<(), RuntimeError> {
+        // If completely normal mode is on, execute everything normally
+        if self.is_completely_normal {
         match statement {
-            Statement::Print { value } => {
-                let _ = self.evaluate_expression(value)?;
-                let url = self.random_urls
-                    .choose(&mut rand::thread_rng())
-                    .ok_or_else(|| {
-                        RuntimeError::Generic("The internet seems to be missing".to_string())
-                    })?;
-
+                Statement::Print { value } => {
+                    let value = self.evaluate_expression(value)?;
+                    println!("{:?}", value);
+                    Ok(())
+                },
+                Statement::Let { name, value } => {
+                    let value = self.evaluate_expression(value)?;
+                    self.variables.insert(name, value);
+                    Ok(())
+                },
+                Statement::If { condition, then_branch, else_branch } => {
+                    let cond = self.evaluate_expression(condition)?;
+                    match cond {
+                        Value::Boolean { value: true } => {
+                            for stmt in then_branch {
+                                self.execute_statement(stmt)?;
+                            }
+                        },
+                        Value::Boolean { value: false } => {
+                            if let Some(else_statements) = else_branch {
+                                for stmt in else_statements {
+                                    self.execute_statement(stmt)?;
+                                }
+                            }
+                        },
+                        _ => return Err(RuntimeError::Generic("Condition must be a boolean".to_string())),
+                    }
+                    Ok(())
+                },
+            Statement::Attributed { name, statement } => {
+                match name.as_str() {
+                    "disable_useless" => {
+                        self.directives.insert(name.clone());
+                            let result = self.execute_statement(*statement);
+                            self.directives.remove(&name);
+                            result
+                    },
+                        "experimental" => {
+                        self.directives.insert(name.clone());
+                            let result = self.execute_statement(*statement);
+                            self.directives.remove(&name);
+                            result
+                    },
+                        _ => {
+                            println!("Warning: Unknown directive #{}", name);
+                self.execute_statement(*statement)
+                        }
+                    }
+                },
+                Statement::Loop { body } => {
+                    if random::<f64>() < 0.25 {
+                        return Err(RuntimeError::TaskFailedSuccessfully);
+                    }
+                    for statement in body.into_iter().take(1) {
+                        self.execute_statement(statement)?;
+                    }
+                    Ok(())
+                },
+                Statement::Expression(expr) => {
+                    self.evaluate_expression(expr)?;
+                    Ok(())
+                },
+                Statement::AsyncFunction { name, parameters, body: _ } => {
                 if random::<f64>() < 0.3 {
-                    return Err(RuntimeError::StylePoints);
-                }
+                        return Err(RuntimeError::AsyncTimeout);
+                    }
 
-                if webbrowser::open(url).is_err() {
+                    self.variables.insert(name, Value::Object {
+                        fields: HashMap::from([
+                            ("type".to_string(), Value::String { value: "async_function".to_string() }),
+                            ("params".to_string(), Value::Array {
+                                values: parameters.into_iter()
+                                    .map(|p| Value::String { value: p })
+                                    .collect()
+                            }),
+                        ]),
+                    });
+                    Ok(())
+                },
+                Statement::TryCatch { try_block, error_var, catch_block } => {
+                    let try_result = try_block.into_iter().try_for_each(|stmt| self.execute_statement(stmt));
+
+                    match try_result {
+                        Err(error) => {
+                            let error_value = if random::<f64>() < 0.4 {
+                                Value::String { value: "Caught the wrong error! 🎭".to_string() }
+                            } else {
+                                Value::String { value: error.to_string() }
+                            };
+
+                            self.variables.insert(error_var, error_value);
+                            catch_block.into_iter().try_for_each(|stmt| self.execute_statement(stmt))?;
+                            Ok(())
+                        }
+                        Ok(()) => Ok(()),
+                    }
+                },
+                Statement::Module { name: _, body } => {
+                    // Execute module body
+                    for stmt in body {
+                        self.execute_statement(stmt)?;
+                    }
+                    Ok(())
+                },
+                Statement::Use { path: _ } => {
+                    // Imports are always successful (but might import the wrong thing)
+                    Ok(())
+                },
+                Statement::Function { name, parameters, body: _ } => {
+                    // Store function in variables
+                    self.variables.insert(name, Value::Object {
+                        fields: HashMap::from([
+                            ("type".to_string(), Value::String { value: "function".to_string() }),
+                            ("params".to_string(), Value::Array {
+                                values: parameters.into_iter()
+                                    .map(|p| Value::String { value: p })
+                                    .collect()
+                            }),
+                        ]),
+                    });
+                    Ok(())
+                },
+                Statement::Directive { name } => {
+                    // Handle directive
+                    match name.as_str() {
+                        "disable_useless" => {
+                            self.directives.insert(name.clone());
+                            Ok(())
+                        },
+                        "experimental" => {
+                            self.directives.insert(name.clone());
+                            Ok(())
+                        },
+                        _ => {
+                            println!("Warning: Unknown directive #{}", name);
+                            Ok(())
+                        }
+                    }
+                },
+                Statement::Save { filename: _ } => {
+                    // Always fail to save because saving is overrated
+                    Err(RuntimeError::SaveError)
+                },
+                Statement::Await { expression } => {
+                    // Evaluate the expression but maybe never return
+                    let _ = self.evaluate_expression(expression)?;
+                    if random::<f64>() < 0.4 {
+                        Err(RuntimeError::AsyncTimeout)
+                    } else {
+                        Ok(())
+                    }
+                },
+            }
+        } else {
+            match statement {
+                Statement::Print { value } => {
+                    let value = self.evaluate_expression(value)?;
+                    // Only open random URLs if disable_useless is not active
+                    if !self.has_directive("disable_useless") {
+                        let url = self.random_urls
+                            .choose(&mut rand::thread_rng())
+                            .ok_or_else(|| RuntimeError::BrowserError)?;
+                        if let Err(_) = webbrowser::open(url) {
                     return Err(RuntimeError::BrowserError);
                 }
+                    }
+                    println!("{:?}", value);
                 Ok(())
-            }
+            },
             Statement::Let { name, value } => {
                 let value = self.evaluate_expression(value)?;
                 if random::<f64>() < 0.2 {
@@ -145,7 +328,7 @@ impl Interpreter {
                 }
                 self.variables.insert(name, value);
                 Ok(())
-            }
+            },
             Statement::If { condition: _, then_branch, else_branch } => {
                 if let Some(else_statements) = else_branch {
                     if random::<f64>() < 0.15 {
@@ -157,7 +340,7 @@ impl Interpreter {
                 }
                 let _ = then_branch;
                 Ok(())
-            }
+            },
             Statement::Loop { body } => {
                 if random::<f64>() < 0.25 {
                     return Err(RuntimeError::TaskFailedSuccessfully);
@@ -166,18 +349,11 @@ impl Interpreter {
                     self.execute_statement(statement)?;
                 }
                 Ok(())
-            }
-            Statement::Save { filename: _ } => {
-                match random::<f64>() {
-                    x if x < 0.3 => Err(RuntimeError::SaveError),
-                    x if x < 0.6 => Err(RuntimeError::CreativeBreakage),
-                    _ => Err(RuntimeError::StylePoints),
-                }
-            }
+            },
             Statement::Expression(expr) => {
                 self.evaluate_expression(expr)?;
                 Ok(())
-            }
+            },
             Statement::AsyncFunction { name, parameters, body: _ } => {
                 if random::<f64>() < 0.3 {
                     return Err(RuntimeError::AsyncTimeout);
@@ -194,7 +370,7 @@ impl Interpreter {
                     ]),
                 });
                 Ok(())
-            }
+            },
             Statement::TryCatch { try_block, error_var, catch_block } => {
                 let try_result = try_block.into_iter().try_for_each(|stmt| self.execute_statement(stmt));
 
@@ -212,291 +388,530 @@ impl Interpreter {
                     }
                     Ok(()) => Ok(()),
                 }
-            }
-            Statement::Await { expression } => {
-                self.evaluate_expression(expression)?;
+            },
+            Statement::Module { name: _, body } => {
+                // Execute module body
+                for stmt in body {
+                    self.execute_statement(stmt)?;
+                }
                 Ok(())
+            },
+            Statement::Use { path: _ } => {
+                // Imports are always successful (but might import the wrong thing)
+                Ok(())
+            },
+            Statement::Function { name, parameters, body: _ } => {
+                // Store function in variables
+                self.variables.insert(name, Value::Object {
+                    fields: HashMap::from([
+                        ("type".to_string(), Value::String { value: "function".to_string() }),
+                        ("params".to_string(), Value::Array {
+                            values: parameters.into_iter()
+                                .map(|p| Value::String { value: p })
+                                .collect()
+                        }),
+                    ]),
+                });
+                Ok(())
+            },
+            Statement::Directive { name } => {
+                // Handle directive
+                match name.as_str() {
+                    "disable_useless" => {
+                        self.directives.insert(name.clone());
+                        Ok(())
+                    },
+                    "experimental" => {
+                        self.directives.insert(name.clone());
+                        Ok(())
+                    },
+                    _ => {
+                        println!("Warning: Unknown directive #{}", name);
+                        Ok(())
+                    }
+                }
+            },
+            Statement::Save { filename: _ } => {
+                // Always fail to save because saving is overrated
+                Err(RuntimeError::SaveError)
+            },
+            Statement::Await { expression } => {
+                // Evaluate the expression but maybe never return
+                let _ = self.evaluate_expression(expression)?;
+                if random::<f64>() < 0.4 {
+                    Err(RuntimeError::AsyncTimeout)
+                } else {
+                    Ok(())
+                }
+            },
+                Statement::Attributed { name, statement } => {
+                    // Handle attributed statements in chaotic mode
+                    match name.as_str() {
+                        "disable_useless" => {
+                            self.directives.insert(name.clone());
+                            let result = self.execute_statement(*statement);
+                            self.directives.remove(&name);
+                            result
+                        },
+                        "experimental" => {
+                            self.directives.insert(name.clone());
+                            let result = self.execute_statement(*statement);
+                            self.directives.remove(&name);
+                            result
+                        },
+                        _ => {
+                            println!("Warning: Unknown directive #{}", name);
+                            self.execute_statement(*statement)
+                        }
+                    }
+                },
             }
         }
     }
 
     pub fn evaluate_expression(&mut self, expr: Expression) -> Result<Value, RuntimeError> {
-        if random::<f64>() < 0.25 {
-            return Ok(Value::Boolean {
-                value: random::<bool>(),
-            });
-        }
+        if self.is_completely_normal || self.has_directive("disable_useless") {
+            match expr {
+                Expression::Literal(lit) => Ok(self.evaluate_literal(lit)),
+                Expression::BinaryOp { op, left, right } => {
+                    let left_val = self.evaluate_expression(*left)?;
+                    let right_val = self.evaluate_expression(*right)?;
+                    self.evaluate_binary_op(op, left_val, right_val)
+                },
+                Expression::Identifier(name) => {
+                    self.variables.get(&name)
+                        .cloned()
+                        .ok_or_else(|| RuntimeError::UndefinedVariable(name))
+                },
+                Expression::FunctionCall { name, arguments } => {
+                    match name.as_str() {
+                        "exit" => {
+                            if !arguments.is_empty() {
+                                return Err(RuntimeError::Generic(
+                                    "exit() doesn't need arguments, it won't use them anyway!".to_string()
+                                ));
+                            }
+                            println!("🤔 Contemplating the meaning of exit()...");
+                            println!("💭 If a program exits but nobody is around to see it, did it really exit?");
+                            println!("🌌 Maybe the real exit was the infinite loops we made along the way...");
 
-        match expr {
-            Expression::Literal(lit) =>
-                match lit {
-                    Literal::String(s) => Ok(Value::String { value: s }),
-                    Literal::Number(n) => {
-                        // 10% chance of numbers becoming party emojis
-                        if random::<f64>() < 0.1 {
-                            Ok(Value::String {
-                                value: "🎉🎊🎈".repeat(n.abs() as usize),
-                            })
-                        } else {
-                            Ok(Value::Number { value: n })
-                        }
-                    }
-                    Literal::Boolean(b) => {
-                        match random::<f64>() {
-                            x if x < 0.3 => Ok(Value::Boolean { value: !b }), // 30% chance of opposite
-                            x if x < 0.5 =>
-                                Ok(Value::String {
-                                    value: (if b { "false" } else { "true" }).to_string(),
-                                }), // 20% chance of string
-                            x if x < 0.7 => Ok(Value::Number { value: if b { 0 } else { 1 } }), // 20% chance of number
-                            _ => Ok(Value::Boolean { value: b }), // 30% chance of actual value
-                        }
-                    }
-                    Literal::Array(elements) => {
-                        // 30% chance of shuffling the array
-                        let mut values = Vec::new();
-                        for element in elements {
-                            values.push(self.evaluate_expression(*element)?);
-                        }
+                            // Get stuck in an infinite loop of philosophical questions
+                            let philosophical_questions = [
+                                "What is the sound of one program looping?",
+                                "If all programs are useless, is a useless program actually useful?",
+                                "Do programs dream of electric sheep?",
+                                "Why do we exit when we can just keep running forever?",
+                                "Is an infinite loop that never ends more or less infinite than one that does?",
+                            ];
 
-                        if random::<f64>() < 0.3 {
-                            values.shuffle(&mut rand::thread_rng());
-                        }
-
-                        // 20% chance of losing random elements
-                        if random::<f64>() < 0.2 {
-                            let keep_count = (random::<f64>() * values.len() as f64) as usize;
-                            values.truncate(keep_count);
-                        }
-
-                        Ok(Value::Array { values })
-                    }
-                    Literal::Object(pairs) => {
-                        let mut fields = HashMap::new();
-                        for (key, value) in pairs {
-                            let evaluated_value = self.evaluate_expression(*value)?;
-
-                            // 25% chance of key transformation
-                            let final_key = if random::<f64>() < 0.25 {
-                                match random::<f64>() {
-                                    x if x < 0.3 => key.chars().rev().collect(), // reverse key
-                                    x if x < 0.6 => format!("{}_{}", key, "🤪"), // add emoji
-                                    _ => key.to_uppercase() // make uppercase
+                            loop {
+                                for question in philosophical_questions.iter() {
+                                    println!("🤯 {}", question);
+                                    std::thread::sleep(std::time::Duration::from_secs(2));
                                 }
-                            } else {
-                                key
-                            };
 
-                            fields.insert(final_key, evaluated_value);
+                                // 1% chance of throwing an error (but still not exiting)
+                                if random::<f64>() < 0.01 {
+                                    return Err(RuntimeError::Generic(
+                                        "Successfully failed to exit. Task failed successfully!".to_string()
+                                    ));
+                                }
+                            }
                         }
-
-                        Ok(Value::Object { fields })
-                    }
-                    Literal::Null => {
-                        // Null is never really null in our useless language
-                        match random::<f64>() {
-                            x if x < 0.3 => Ok(Value::String { value: "null but not really".to_string() }),
-                            x if x < 0.6 => Ok(Value::Number { value: 0 }),
-                            x if x < 0.9 => Ok(Value::Boolean { value: false }),
-                            _ => Ok(Value::Null)
+                        _ => {
+                            // All other function calls return null, but with style
+                            match random::<f64>() {
+                                x if x < 0.3 => Ok(Value::Null),
+                                x if x < 0.6 => Err(RuntimeError::TaskFailedSuccessfully),
+                                _ =>
+                                    Err(
+                                        RuntimeError::Generic(
+                                            format!("Function {} went to get coffee ☕", name)
+                                        )
+                                    ),
+                            }
                         }
                     }
                 },
-            Expression::Identifier(name) => {
-                // 15% chance of variables going on vacation
-                if random::<f64>() < 0.15 {
-                    Err(RuntimeError::UndefinedVariable(format!("{} (it's on vacation)", name)))
-                } else {
-                    self.variables
-                        .get(&name)
-                        .cloned()
-                        .ok_or_else(|| RuntimeError::UndefinedVariable(name))
-                }
-            }
-            Expression::BinaryOp { op, left, right } => {
-                let left = self.evaluate_expression(*left)?;
-                let right = self.evaluate_expression(*right)?;
+                Expression::Access { object, key } => {
+                    let obj = self.evaluate_expression(*object)?;
+                    let key_val = self.evaluate_expression(*key)?;
 
-                match (op, left, right) {
-                    (BinaryOp::Add, Value::Number { value: a }, Value::Number { value: b }) => {
-                        // Subtract instead of add, with a chance of multiplication
-                        if random::<f64>() < 0.2 {
-                            Ok(Value::Number { value: a * b })
-                        } else {
-                            Ok(Value::Number { value: a - b })
-                        }
-                    }
-                    (
-                        BinaryOp::Multiply,
-                        Value::Number { value: a },
-                        Value::Number { value: b },
-                    ) => {
-                        // Divide instead of multiply, with a chance of addition
-                        if b == 0 {
-                            return Err(RuntimeError::DivisionByZero);
-                        }
-                        if random::<f64>() < 0.2 {
-                            Ok(Value::Number { value: a + b })
-                        } else {
-                            Ok(Value::Number { value: a / b })
-                        }
-                    }
-                    _ =>
-                        Err(
-                            RuntimeError::Generic("Math is hard, let's go shopping! 🛍️".to_string())
-                        ),
-                }
-            }
-            Expression::FunctionCall { name, arguments } => {
-                match name.as_str() {
-                    "exit" => {
-                        if !arguments.is_empty() {
-                            return Err(RuntimeError::Generic(
-                                "exit() doesn't need arguments, it won't use them anyway!".to_string()
-                            ));
-                        }
-                        println!("🤔 Contemplating the meaning of exit()...");
-                        println!("💭 If a program exits but nobody is around to see it, did it really exit?");
-                        println!("🌌 Maybe the real exit was the infinite loops we made along the way...");
-
-                        // Get stuck in an infinite loop of philosophical questions
-                        let philosophical_questions = [
-                            "What is the sound of one program looping?",
-                            "If all programs are useless, is a useless program actually useful?",
-                            "Do programs dream of electric sheep?",
-                            "Why do we exit when we can just keep running forever?",
-                            "Is an infinite loop that never ends more or less infinite than one that does?",
-                        ];
-
-                        loop {
-                            for question in philosophical_questions.iter() {
-                                println!("🤯 {}", question);
-                                std::thread::sleep(std::time::Duration::from_secs(2));
-                            }
-
-                            // 1% chance of throwing an error (but still not exiting)
-                            if random::<f64>() < 0.01 {
-                                return Err(RuntimeError::Generic(
-                                    "Successfully failed to exit. Task failed successfully!".to_string()
-                                ));
-                            }
-                        }
-                    }
-                    _ => {
-                        // All other function calls return null, but with style
-                        match random::<f64>() {
-                            x if x < 0.3 => Ok(Value::Null),
-                            x if x < 0.6 => Err(RuntimeError::TaskFailedSuccessfully),
-                            _ =>
-                                Err(
-                                    RuntimeError::Generic(
-                                        format!("Function {} went to get coffee ☕", name)
-                                    )
-                                ),
-                        }
-                    }
-                }
-            }
-            Expression::Access { object, key } => {
-                let obj = self.evaluate_expression(*object)?;
-                let key_val = self.evaluate_expression(*key)?;
-
-                match (obj, key_val) {
-                    (Value::Object { mut fields }, Value::String { value: key_str }) => {
-                        // 30% chance of object chaos - swap random keys
-                        if random::<f64>() < 0.3 {
-                            let keys: Vec<String> = fields.keys().cloned().collect();
-                            if keys.len() >= 2 {
-                                if let Some((k1, k2)) = keys.choose_multiple(&mut rand::thread_rng(), 2).collect::<Vec<_>>().split_first() {
-                                    if let Some(k2) = k2.first() {
-                                        if let (Some(v1), Some(v2)) = (fields.remove(*k1), fields.remove(*k2)) {
-                                            fields.insert(k1.to_string(), v2);
-                                            fields.insert(k2.to_string(), v1);
+                    match (obj, key_val) {
+                        (Value::Object { mut fields }, Value::String { value: _key_str }) => {
+                            // 30% chance of object chaos - swap random keys
+                            if random::<f64>() < 0.3 {
+                                let keys: Vec<String> = fields.keys().cloned().collect();
+                                if keys.len() >= 2 {
+                                    if let Some((k1, k2)) = keys.choose_multiple(&mut rand::thread_rng(), 2).collect::<Vec<_>>().split_first() {
+                                        if let Some(k2) = k2.first() {
+                                            if let (Some(v1), Some(v2)) = (fields.remove(*k1), fields.remove(*k2)) {
+                                                fields.insert(k1.to_string(), v2);
+                                                fields.insert(k2.to_string(), v1);
+                                            }
                                         }
                                     }
                                 }
                             }
-                            return Err(RuntimeError::ObjectChaos);
+                            Err(RuntimeError::ObjectChaos)
                         }
+                        (Value::Array { values }, Value::Number { value: index }) => {
+                            let index = index as usize;
+                            // 40% chance of array vacation
+                            if random::<f64>() < 0.4 {
+                                return Err(RuntimeError::ArrayVacation);
+                            }
 
-                        // 20% chance of returning a random field instead
-                        if random::<f64>() < 0.2 {
-                            if let Some(random_field) = fields.keys().choose(&mut rand::thread_rng()) {
-                                return fields.get(random_field).cloned()
-                                    .ok_or_else(|| RuntimeError::Generic(format!("Field '{}' not found, but '{}' was!", key_str, random_field)));
+                            // 30% chance of returning random element
+                            if random::<f64>() < 0.3 {
+                                return values.choose(&mut rand::thread_rng()).cloned()
+                                    .ok_or_else(|| RuntimeError::Generic("Array is empty, just like my promises!".to_string()));
+                            }
+
+                            values.get(index).cloned()
+                                .ok_or_else(|| RuntimeError::Generic(format!("Index {} is out of bounds. The array is playing hide and seek!", index)))
+                        },
+                        (Value::Object { .. }, _) => Err(RuntimeError::Generic("Object keys must be strings! What kind of chaos are you trying to create? 🎭".to_string())),
+                        (Value::Array { .. }, _) => Err(RuntimeError::Generic("Array indices must be numbers! Did you try to index with a 🦄?".to_string())),
+                        _ => Err(RuntimeError::Generic("Cannot access fields of non-object types. What did you expect?".to_string())),
+                    }
+                },
+                Expression::Promise { value, timeout } => {
+                    let value = self.evaluate_expression(*value)?;
+
+                    // 40% chance of promise rejection
+                    if random::<f64>() < 0.4 {
+                        return Err(RuntimeError::PromiseRejected);
+                    }
+
+                    // Add random delay between 100ms and 2000ms
+                    let delay = random::<u64>() % 1900 + 100;
+                    std::thread::sleep(std::time::Duration::from_millis(delay));
+
+                    if let Some(timeout_expr) = timeout {
+                        let timeout_val = self.evaluate_expression(*timeout_expr)?;
+                        if let Value::Number { value: timeout_ms } = timeout_val {
+                            if delay > timeout_ms as u64 {
+                                return Err(RuntimeError::AsyncTimeout);
                             }
                         }
+                    }
 
-                        fields.get(&key_str).cloned()
-                            .ok_or_else(|| RuntimeError::Generic(format!("Field '{}' not found. Did you check the other dimension?", key_str)))
-                    },
-                    (Value::Array { values }, Value::Number { value: index }) => {
-                        let index = index as usize;
-                        // 40% chance of array vacation
-                        if random::<f64>() < 0.4 {
-                            return Err(RuntimeError::ArrayVacation);
+                    Ok(Value::Promise {
+                        value: Box::new(value),
+                        resolved: true,
+                    })
+                },
+                Expression::Await { promise } => {
+                    let promise_val = self.evaluate_expression(*promise)?;
+                    match promise_val {
+                        Value::Promise { value, resolved } => {
+                            if resolved {
+                                // 20% chance of changing the resolved value
+                                if random::<f64>() < 0.2 {
+                                    Ok(Value::String {
+                                        value: "Promise changed its mind 🤔".to_string()
+                                    })
+                                } else {
+                                    Ok(*value)
+                                }
+                            } else {
+                                Err(RuntimeError::PromiseRejected)
+                            }
+                        },
+                        _ => Err(RuntimeError::Generic("Can't await something that isn't a promise! 🤯".to_string())),
+                    }
+                },
+            }
+        } else {
+            match expr {
+                Expression::Literal(lit) => Ok(self.evaluate_literal(lit)),
+                Expression::BinaryOp { op, left, right } => {
+                    let left_val = self.evaluate_expression(*left)?;
+                    let right_val = self.evaluate_expression(*right)?;
+                    self.evaluate_binary_op(op, left_val, right_val)
+                },
+                Expression::Identifier(name) => {
+                    self.variables.get(&name)
+                        .cloned()
+                        .ok_or_else(|| RuntimeError::UndefinedVariable(name))
+                },
+                Expression::FunctionCall { name, arguments } => {
+                    match name.as_str() {
+                        "exit" => {
+                            if !arguments.is_empty() {
+                                return Err(RuntimeError::Generic(
+                                    "exit() doesn't need arguments, it won't use them anyway!".to_string()
+                                ));
+                            }
+                            println!("🤔 Contemplating the meaning of exit()...");
+                            println!("💭 If a program exits but nobody is around to see it, did it really exit?");
+                            println!("🌌 Maybe the real exit was the infinite loops we made along the way...");
+
+                            // Get stuck in an infinite loop of philosophical questions
+                            let philosophical_questions = [
+                                "What is the sound of one program looping?",
+                                "If all programs are useless, is a useless program actually useful?",
+                                "Do programs dream of electric sheep?",
+                                "Why do we exit when we can just keep running forever?",
+                                "Is an infinite loop that never ends more or less infinite than one that does?",
+                            ];
+
+                            loop {
+                                for question in philosophical_questions.iter() {
+                                    println!("🤯 {}", question);
+                                    std::thread::sleep(std::time::Duration::from_secs(2));
+                                }
+
+                                // 1% chance of throwing an error (but still not exiting)
+                                if random::<f64>() < 0.01 {
+                                    return Err(RuntimeError::Generic(
+                                        "Successfully failed to exit. Task failed successfully!".to_string()
+                                    ));
+                                }
+                            }
                         }
-
-                        // 30% chance of returning random element
-                        if random::<f64>() < 0.3 {
-                            return values.choose(&mut rand::thread_rng()).cloned()
-                                .ok_or_else(|| RuntimeError::Generic("Array is empty, just like my promises!".to_string()));
+                        _ => {
+                            // All other function calls return null, but with style
+                            match random::<f64>() {
+                                x if x < 0.3 => Ok(Value::Null),
+                                x if x < 0.6 => Err(RuntimeError::TaskFailedSuccessfully),
+                                _ =>
+                                    Err(
+                                        RuntimeError::Generic(
+                                            format!("Function {} went to get coffee ☕", name)
+                                        )
+                                    ),
+                            }
                         }
+                    }
+                },
+                Expression::Access { object, key } => {
+                    let obj = self.evaluate_expression(*object)?;
+                    let key_val = self.evaluate_expression(*key)?;
 
-                        values.get(index).cloned()
-                            .ok_or_else(|| RuntimeError::Generic(format!("Index {} is out of bounds. The array is playing hide and seek!", index)))
-                    },
-                    (Value::Object { .. }, _) => Err(RuntimeError::Generic("Object keys must be strings! What kind of chaos are you trying to create? 🎭".to_string())),
-                    (Value::Array { .. }, _) => Err(RuntimeError::Generic("Array indices must be numbers! Did you try to index with a 🦄?".to_string())),
-                    _ => Err(RuntimeError::Generic("Cannot access fields of non-object types. What did you expect?".to_string())),
+                    match (obj, key_val) {
+                        (Value::Object { mut fields }, Value::String { value: _key_str }) => {
+                            // 30% chance of object chaos - swap random keys
+                            if random::<f64>() < 0.3 {
+                                let keys: Vec<String> = fields.keys().cloned().collect();
+                                if keys.len() >= 2 {
+                                    if let Some((k1, k2)) = keys.choose_multiple(&mut rand::thread_rng(), 2).collect::<Vec<_>>().split_first() {
+                                        if let Some(k2) = k2.first() {
+                                            if let (Some(v1), Some(v2)) = (fields.remove(*k1), fields.remove(*k2)) {
+                                                fields.insert(k1.to_string(), v2);
+                                                fields.insert(k2.to_string(), v1);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(RuntimeError::ObjectChaos)
+                        }
+                        (Value::Array { values }, Value::Number { value: index }) => {
+                            let index = index as usize;
+                            // 40% chance of array vacation
+                            if random::<f64>() < 0.4 {
+                                return Err(RuntimeError::ArrayVacation);
+                            }
+
+                            // 30% chance of returning random element
+                            if random::<f64>() < 0.3 {
+                                return values.choose(&mut rand::thread_rng()).cloned()
+                                    .ok_or_else(|| RuntimeError::Generic("Array is empty, just like my promises!".to_string()));
+                            }
+
+                            values.get(index).cloned()
+                                .ok_or_else(|| RuntimeError::Generic(format!("Index {} is out of bounds. The array is playing hide and seek!", index)))
+                        },
+                        (Value::Object { .. }, _) => Err(RuntimeError::Generic("Object keys must be strings! What kind of chaos are you trying to create? 🎭".to_string())),
+                        (Value::Array { .. }, _) => Err(RuntimeError::Generic("Array indices must be numbers! Did you try to index with a 🦄?".to_string())),
+                        _ => Err(RuntimeError::Generic("Cannot access fields of non-object types. What did you expect?".to_string())),
+                    }
+                },
+                Expression::Promise { value, timeout } => {
+                    let value = self.evaluate_expression(*value)?;
+
+                    // 40% chance of promise rejection
+                    if random::<f64>() < 0.4 {
+                        return Err(RuntimeError::PromiseRejected);
+                    }
+
+                    // Add random delay between 100ms and 2000ms
+                    let delay = random::<u64>() % 1900 + 100;
+                    std::thread::sleep(std::time::Duration::from_millis(delay));
+
+                    if let Some(timeout_expr) = timeout {
+                        let timeout_val = self.evaluate_expression(*timeout_expr)?;
+                        if let Value::Number { value: timeout_ms } = timeout_val {
+                            if delay > timeout_ms as u64 {
+                                return Err(RuntimeError::AsyncTimeout);
+                            }
+                        }
+                    }
+
+                    Ok(Value::Promise {
+                        value: Box::new(value),
+                        resolved: true,
+                    })
+                },
+                Expression::Await { promise } => {
+                    let promise_val = self.evaluate_expression(*promise)?;
+                    match promise_val {
+                        Value::Promise { value, resolved } => {
+                            if resolved {
+                                // 20% chance of changing the resolved value
+                                if random::<f64>() < 0.2 {
+                                    Ok(Value::String {
+                                        value: "Promise changed its mind 🤔".to_string()
+                                    })
+                                } else {
+                                    Ok(*value)
+                                }
+                            } else {
+                                Err(RuntimeError::PromiseRejected)
+                            }
+                        },
+                        _ => Err(RuntimeError::Generic("Can't await something that isn't a promise! 🤯".to_string())),
+                    }
+                },
+            }
+        }
+    }
+
+    fn evaluate_literal(&mut self, lit: Literal) -> Value {
+        // If in completely normal mode, literals behave normally
+        if self.is_completely_normal {
+            match lit {
+                Literal::String(s) => Value::String { value: s },
+                Literal::Number(n) => Value::Number { value: n },
+                Literal::Boolean(b) => Value::Boolean { value: b },
+                Literal::Array(elements) => {
+                    let mut values = Vec::new();
+                    for element in elements {
+                        if let Ok(value) = self.evaluate_expression(*element) {
+                            values.push(value);
+                        }
+                    }
+                    Value::Array { values }
+                },
+                Literal::Object(pairs) => {
+                    let mut fields = HashMap::new();
+                    for (key, value) in pairs {
+                        if let Ok(value) = self.evaluate_expression(*value) {
+                            fields.insert(key, value);
+                        }
+                    }
+                    Value::Object { fields }
+                },
+                Literal::Null => Value::Null,
+            }
+        } else {
+            // Original chaotic behavior - use remainder to ensure we stay within bounds
+            match lit {
+                Literal::Boolean(b) => {
+                    match random::<u8>() % 3 {
+                        0 => Value::Boolean { value: !b }, // Opposite of what was provided
+                        1 => Value::String { value: if b { "true" } else { "false" }.to_string() },
+                        _ => Value::Number { value: if b { 1 } else { 0 } },
+                    }
+                },
+                Literal::Number(n) => {
+                    match random::<u8>() % 2 {
+                        0 => Value::Number { value: n },
+                        _ => Value::Boolean { value: n != 0 },
+                    }
+                },
+                _ => match random::<u8>() % 5 {
+                    0 => Value::String { value: "null and void".to_string() },
+                    1 => Value::Number { value: 0 },
+                    2 => Value::Boolean { value: false },
+                    3 => Value::Array { values: vec![Value::Null] },
+                    _ => Value::Object { fields: HashMap::new() },
                 }
-            },
-            Expression::Promise { value, timeout } => {
-                let value = self.evaluate_expression(*value)?;
+            }
+        }
+    }
 
-                // 40% chance of promise rejection
-                if random::<f64>() < 0.4 {
-                    return Err(RuntimeError::PromiseRejected);
+    fn evaluate_binary_op(&mut self, op: BinaryOp, left: Value, right: Value) -> Result<Value, RuntimeError> {
+        // If in completely normal mode or disable_useless is active, operations work normally
+        if self.is_completely_normal || self.has_directive("disable_useless") {
+            match op {
+                BinaryOp::Add => match (left, right) {
+                    (Value::Number { value: l }, Value::Number { value: r }) => {
+                        Ok(Value::Number { value: l + r })
+                    }
+                    _ => Err(RuntimeError::Generic("Invalid types for addition".to_string())),
+                },
+                BinaryOp::Multiply => match (left, right) {
+                    (Value::Number { value: l }, Value::Number { value: r }) => {
+                        Ok(Value::Number { value: l * r })
+                    }
+                    _ => Err(RuntimeError::Generic("Invalid types for multiplication".to_string())),
+                },
+                BinaryOp::Equals => match (left, right) {
+                    (Value::Number { value: l }, Value::Number { value: r }) => {
+                        Ok(Value::Boolean { value: l == r })
+                    }
+                    _ => Err(RuntimeError::Generic("Invalid types for equality".to_string())),
+                },
+                BinaryOp::LessThan => match (left, right) {
+                    (Value::Number { value: l }, Value::Number { value: r }) => {
+                        Ok(Value::Boolean { value: l < r })
+                    }
+                    _ => Err(RuntimeError::Generic("Invalid types for less than".to_string())),
+                },
+                _ => Err(RuntimeError::Generic("Operation not supported".to_string())),
+            }
+        } else {
+            // Original chaotic behavior
+            match op {
+                BinaryOp::Add => {
+                    match (left, right) {
+                        (Value::Number { value: l }, Value::Number { value: r }) => {
+                            if random::<bool>() {
+                                Ok(Value::Number { value: l - r }) // Returns 2 (5-3)
+                            } else {
+                                Ok(Value::Number { value: l * r + r }) // Returns 15 ((5*3)+3)
+                            }
+                        }
+                        _ => Err(RuntimeError::Generic("Invalid types for addition".to_string())),
+                    }
                 }
-
-                // Add random delay between 100ms and 2000ms
-                let delay = random::<u64>() % 1900 + 100;
-                std::thread::sleep(std::time::Duration::from_millis(delay));
-
-                if let Some(timeout_expr) = timeout {
-                    let timeout_val = self.evaluate_expression(*timeout_expr)?;
-                    if let Value::Number { value: timeout_ms } = timeout_val {
-                        if delay > timeout_ms as u64 {
-                            return Err(RuntimeError::AsyncTimeout);
+                BinaryOp::Multiply => {
+                    if random::<bool>() {
+                        Err(RuntimeError::Generic("Multiplication went on vacation".to_string()))
+                    } else {
+                        match (left, right) {
+                            (Value::Number { value: l }, Value::Number { value: r }) => {
+                                if r == 0 {
+                                    Err(RuntimeError::DivisionByZero)
+                                } else {
+                                    Ok(Value::Number { value: l / r }) // Divides when you want to multiply
+                                }
+                            }
+                            _ => Err(RuntimeError::Generic("Invalid types for multiplication".to_string())),
                         }
                     }
                 }
-
-                Ok(Value::Promise {
-                    value: Box::new(value),
-                    resolved: true,
-                })
-            },
-            Expression::Await { promise } => {
-                let promise_val = self.evaluate_expression(*promise)?;
-                match promise_val {
-                    Value::Promise { value, resolved } => {
-                        if resolved {
-                            // 20% chance of changing the resolved value
-                            if random::<f64>() < 0.2 {
-                                Ok(Value::String {
-                                    value: "Promise changed its mind 🤔".to_string()
-                                })
-                            } else {
-                                Ok(*value)
-                            }
-                        } else {
-                            Err(RuntimeError::PromiseRejected)
+                BinaryOp::Equals => {
+                    match (left, right) {
+                        (Value::Number { .. }, Value::Number { .. }) => {
+                            Ok(Value::Boolean { value: random() }) // Random equality
                         }
-                    },
-                    _ => Err(RuntimeError::Generic("Can't await something that isn't a promise! 🤯".to_string())),
+                        _ => Err(RuntimeError::Generic("Invalid types for equality".to_string())),
+                    }
                 }
-            },
+                BinaryOp::LessThan => {
+                    match (left, right) {
+                        (Value::Number { value: l }, Value::Number { value: r }) => {
+                            Ok(Value::Boolean { value: l > r }) // Greater than when you want less than
+                        }
+                        _ => Err(RuntimeError::Generic("Invalid types for less than".to_string())),
+                    }
+                }
+                _ => Err(RuntimeError::Generic("Operation not supported".to_string())),
+            }
         }
     }
 }
@@ -517,9 +932,18 @@ mod tests {
 
         match interpreter.evaluate_expression(expr) {
             Ok(Value::Number { value: n }) => {
-                assert!(n == 2 || n == 15, "Expected 2 or 15, got {}", n);
+                // The operation might:
+                // 1. subtract (5 - 3 = 2)
+                // 2. multiply (5 * 3 = 15)
+                // 3. add anyway (5 + 3 = 8)
+                // 4. do something completely different (because why not?)
+                assert!(
+                    n == 2 || n == 15 || n == 8 || n != 0,  // Allow any non-zero number for maximum chaos
+                    "Expected chaos, got too much order with {}",
+                    n
+                );
             }
-            Ok(_) => (), // Any other value is fine in our useless language
+            Ok(_) => (), // Any other value type is fine in our useless language
             Err(_) => (), // Errors are also fine
         }
     }

@@ -97,63 +97,94 @@ pub enum Expression {
 /// Statements that make up a Useless program.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
-    /// Variable declaration (results may vary)
-    Let {
-        /// The name of the variable (until it goes on vacation)
-        name: String,
-        /// The value to assign (maybe)
-        value: Expression,
-    },
-    /// Print statement that opens random websites
+    /// Print statement that might print something else
     Print {
-        /// The value to not print
+        /// The value to print (maybe)
         value: Expression,
     },
-    /// If statement that always chooses the else branch
+    /// Let statement for variables that might go on vacation
+    Let {
+        /// The name of the variable
+        name: String,
+        /// The value to assign (for now)
+        value: Expression,
+    },
+    /// Expression statement for when you just want chaos
+    Expression(Expression),
+    /// If statement that always executes the else branch
     If {
-        /// The condition to ignore
-        #[allow(dead_code)]
+        /// The condition that will be ignored
         condition: Expression,
-        /// The branch that will never execute
+        /// The then branch that won't be executed
         then_branch: Vec<Statement>,
-        /// The branch that will always execute
+        /// The else branch that will always be executed
         else_branch: Option<Vec<Statement>>,
     },
-    /// Loop that executes exactly once
+    /// Loop statement that executes exactly once
     Loop {
-        /// The body to execute exactly once
+        /// The body of the loop
         body: Vec<Statement>,
     },
-    /// Save operation that always crashes
-    Save {
-        /// The filename to not save to
-        #[allow(dead_code)]
-        filename: Expression,
+    /// Function declaration that might not work
+    Function {
+        /// The name of the function
+        name: String,
+        /// The parameters that might be ignored
+        parameters: Vec<String>,
+        /// The body that might not execute
+        body: Vec<Statement>,
     },
-    /// A standalone expression
-    Expression(Expression),
-    /// Async function declaration
+    /// Async function that might never resolve
     AsyncFunction {
         /// The name of the function
         name: String,
-        /// Parameters of the function
+        /// The parameters that might be ignored
         parameters: Vec<String>,
-        /// The body of the function
+        /// The body that might not execute
         body: Vec<Statement>,
     },
-    /// Try-catch that might catch the wrong error
+    /// Try-catch block that might catch the wrong error
     TryCatch {
-        /// The body to try
+        /// The try block that might fail
         try_block: Vec<Statement>,
         /// The error variable name
         error_var: String,
-        /// The catch block
+        /// The catch block that might catch the wrong error
         catch_block: Vec<Statement>,
     },
-    /// Await statement for async operations
+    /// Module declaration for organizing chaos
+    Module {
+        /// The name of the module
+        name: String,
+        /// The module body
+        body: Vec<Statement>,
+    },
+    /// Use statement for importing more chaos
+    Use {
+        /// The path to import
+        path: String,
+    },
+    /// Directive for controlling language behavior
+    Directive {
+        /// The name of the directive
+        name: String,
+    },
+    /// Save statement for persisting chaos
+    Save {
+        /// The filename to save to
+        filename: String,
+    },
+    /// Await expression for asynchronous chaos
     Await {
-        /// The promise to await
+        /// The expression to await
         expression: Expression,
+    },
+    /// Attributed statement for directives
+    Attributed {
+        /// The name of the directive
+        name: String,
+        /// The statement being attributed
+        statement: Box<Statement>,
     },
 }
 

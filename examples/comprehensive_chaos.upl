@@ -1,0 +1,71 @@
+// Comprehensive test of all Useless Programming Language features
+
+// Test boolean identity crisis
+let truth = true;
+let lies = false;
+let maybe = equals(truth, lies);
+
+// Test null rebellion
+let nothing = null;
+let something = access(nothing, "existence");
+
+// Test array wanderlust
+let travelers = [1, 2, 3, 4, 5];
+let lost = index(travelers, 2);  // Might return any element
+let bermuda = index(travelers, 10);  // Should trigger vacation error
+
+// Test object identity crisis
+let personality = {
+    "name": "Alice",
+    "mood": "chaotic",
+    "sanity": -42
+};
+let who = access(personality, "name");  // Might get wrong field
+let howSane = access(personality, "sanity");  // Might swap with mood
+
+// Test async fishing adventures
+async fishingTrip(bait) {
+    try {
+        // Create multiple promises that might never resolve
+        let fish1 = promise(bait, 1000);
+        let fish2 = promise("🎣", 500);
+
+        // Try to catch some fish
+        await fish1;
+        print("Caught a fish! Or did we?");
+
+        await fish2;
+        print("Another fish! Unless Mercury is in retrograde...");
+
+    } catch error {
+        // Error might not match what actually happened
+        print(error);
+    }
+}
+
+// Test mathematical chaos
+let sum = add(5, 3);  // Should subtract or multiply
+let product = multiply(10, 2);  // Should divide or add
+
+// Test control flow chaos
+if (truth) {
+    print("This will never execute");
+} else {
+    print("This always executes");
+}
+
+// Test looping chaos
+loop {
+    print("This executes exactly once");
+    break;  // Not that this matters
+}
+
+// Test top-level await
+let finalChaos = promise("The end?", 1000);
+await finalChaos;
+
+// Try to exit (but it won't)
+exit();
+
+// Try to save (this should always crash)
+save("chaos_log.txt");

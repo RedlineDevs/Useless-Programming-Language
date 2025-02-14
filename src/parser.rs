@@ -71,21 +71,54 @@ impl Parser {
     /// Parses a single statement.
     /// Each statement has an equal chance of doing something unexpected.
     fn parse_statement(&mut self) -> Result<Statement, ParseError> {
-        match self.peek().map(|t| &t.kind) {
-            Some(TokenKind::Let) => self.parse_let_statement(),
-            Some(TokenKind::Print) => self.parse_print_statement(),
-            Some(TokenKind::If) => self.parse_if_statement(),
-            Some(TokenKind::Loop) => self.parse_loop_statement(),
-            Some(TokenKind::Save) => self.parse_save_statement(),
+        // Parse attributes that may precede the statement
+        let mut attributes = Vec::new();
+        while self.peek().map(|t| &t.kind) == Some(&TokenKind::Attribute) {
+            let token = self.advance().unwrap();
+            // Extract attribute name and optional parameters
+            let content = &token.text[2..token.text.len()-1];
+            if let Some(paren_idx) = content.find('(') {
+                let name = content[..paren_idx].to_string();
+                let params = content[paren_idx+1..content.len()-1].to_string();
+                attributes.push((name, Some(params)));
+            } else {
+                attributes.push((content.to_string(), None));
+            }
+        }
+
+        let statement = match self.peek().map(|t| &t.kind) {
+            Some(TokenKind::Module) => self.parse_module()?,
+            Some(TokenKind::Use) => self.parse_use()?,
+            Some(TokenKind::Let) => self.parse_let_statement()?,
+            Some(TokenKind::Directive) => {
+                let token = self.advance().unwrap();
+                let name = token.text[11..token.text.len()-2].to_string();
+                Statement::Attributed {
+                    name,
+                    statement: Box::new(self.parse_statement()?)
+                }
+            },
+            Some(TokenKind::Print) => self.parse_print_statement()?,
+            Some(TokenKind::If) => self.parse_if_statement()?,
+            Some(TokenKind::Loop) => self.parse_loop_statement()?,
+            Some(TokenKind::Save) => {
+                self.advance(); // consume save
+                let filename = match self.advance() {
+                    Some(token) if token.kind == TokenKind::StringLiteral => token.text.trim_matches('"').to_string(),
+                    _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+                };
+                self.consume(&TokenKind::Semicolon)?;
+                Statement::Save { filename }
+            },
             Some(TokenKind::Exit) => {
                 self.advance();  // consume 'exit'
                 self.consume(&TokenKind::LeftParen)?;  // expect (
                 self.consume(&TokenKind::RightParen)?;  // expect )
                 self.consume(&TokenKind::Semicolon)?;  // expect semicolon
-                Ok(Statement::Expression(Expression::FunctionCall {
+                Statement::Expression(Expression::FunctionCall {
                     name: "exit".to_string(),
                     arguments: vec![],
-                }))
+                })
             },
             Some(TokenKind::Async) => {
                 self.advance(); // consume async
@@ -116,7 +149,7 @@ impl Parser {
                 }
                 self.consume(&TokenKind::RightBrace)?;
 
-                Ok(Statement::AsyncFunction { name, parameters, body })
+                Statement::AsyncFunction { name, parameters, body }
             },
             Some(TokenKind::Try) => {
                 self.advance(); // consume try
@@ -140,23 +173,84 @@ impl Parser {
                 }
                 self.consume(&TokenKind::RightBrace)?;
 
-                Ok(Statement::TryCatch {
+                Statement::TryCatch {
                     try_block,
                     error_var,
                     catch_block,
-                })
+                }
             },
             Some(TokenKind::Await) => {
                 self.advance(); // consume await
                 let expression = self.parse_expression()?;
                 self.consume(&TokenKind::Semicolon)?;
-                Ok(Statement::Await { expression })
+                Statement::Await { expression }
             },
+            Some(TokenKind::Identifier) => {
+                let name = match self.advance() {
+                    Some(token) if token.kind == TokenKind::Identifier => token.text,
+                    _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+                };
+
+                // Check if this is a function declaration or call
+                if self.peek().map(|t| &t.kind) == Some(&TokenKind::LeftParen) {
+                    self.consume(&TokenKind::LeftParen)?;
+                    let mut arguments = Vec::new();
+                    while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightParen) {
+                        arguments.push(self.parse_expression()?);
+                        if self.peek().map(|t| &t.kind) == Some(&TokenKind::Comma) {
+                            self.advance(); // consume comma
+                        }
+                    }
+                    self.consume(&TokenKind::RightParen)?;
+
+                    // If followed by { it's a function declaration
+                    if self.peek().map(|t| &t.kind) == Some(&TokenKind::LeftBrace) {
+                        self.consume(&TokenKind::LeftBrace)?;
+                        let mut body = Vec::new();
+                        while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
+                            body.push(self.parse_statement()?);
+                        }
+                        self.consume(&TokenKind::RightBrace)?;
+                        Ok(Statement::Function {
+                            name,
+                            parameters: arguments.into_iter()
+                                .filter_map(|arg| match arg {
+                                    Expression::Identifier(name) => Some(name),
+                                    _ => None,
+                                })
+                                .collect(),
+                            body
+                        })
+                    } else {
+                        // Otherwise it's a function call
+                        self.consume(&TokenKind::Semicolon)?;
+                        Ok(Statement::Expression(Expression::FunctionCall {
+                            name,
+                            arguments,
+                        }))
+                    }
+                } else {
+                    // Not a function, treat as expression
+                    let expr = Expression::Identifier(name);
+                    self.consume(&TokenKind::Semicolon)?;
+                    Ok(Statement::Expression(expr))
+                }
+            }?,
             _ => {
                 let expr = self.parse_expression()?;
                 self.consume(&TokenKind::Semicolon)?;
-                Ok(Statement::Expression(expr))
+                Statement::Expression(expr)
             }
+        };
+
+        // If we have attributes, wrap the statement
+        if !attributes.is_empty() {
+            Ok(Statement::Attributed {
+                name: attributes[0].0.clone(),
+                statement: Box::new(statement)
+            })
+        } else {
+            Ok(statement)
         }
     }
 
@@ -477,15 +571,82 @@ impl Parser {
         Ok(Statement::Loop { body })
     }
 
-    /// Parses a save statement that always crashes.
-    fn parse_save_statement(&mut self) -> Result<Statement, ParseError> {
-        self.advance(); // consume 'save'
-        self.consume(&TokenKind::LeftParen)?;
-        let filename = self.parse_expression()?;
-        self.consume(&TokenKind::RightParen)?;
-        self.consume(&TokenKind::Semicolon)?;
+    /// Parses a function declaration
+    fn parse_function(&mut self) -> Result<Statement, ParseError> {
+        self.advance(); // consume 'fn'
+        let name = match self.advance() {
+            Some(token) if token.kind == TokenKind::Identifier => token.text,
+            _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+        };
 
-        Ok(Statement::Save { filename })
+        self.consume(&TokenKind::LeftParen)?;
+        let mut parameters = Vec::new();
+        while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightParen) {
+            match self.advance() {
+                Some(token) if token.kind == TokenKind::Identifier => {
+                    parameters.push(token.text);
+                },
+                _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+            }
+            if self.peek().map(|t| &t.kind) == Some(&TokenKind::Comma) {
+                self.advance(); // consume comma
+            }
+        }
+        self.consume(&TokenKind::RightParen)?;
+
+        self.consume(&TokenKind::LeftBrace)?;
+        let mut body = Vec::new();
+        while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
+            body.push(self.parse_statement()?);
+        }
+        self.consume(&TokenKind::RightBrace)?;
+
+        Ok(Statement::Function { name, parameters, body })
+    }
+
+    /// Parses a module declaration
+    fn parse_module(&mut self) -> Result<Statement, ParseError> {
+        self.advance(); // consume 'mod'
+        let name = match self.advance() {
+            Some(token) if token.kind == TokenKind::Identifier => token.text,
+            _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+        };
+
+        self.consume(&TokenKind::LeftBrace)?;
+        let mut body = Vec::new();
+        while self.peek().map(|t| &t.kind) != Some(&TokenKind::RightBrace) {
+            body.push(self.parse_statement()?);
+        }
+        self.consume(&TokenKind::RightBrace)?;
+
+        Ok(Statement::Module { name, body })
+    }
+
+    /// Parses a use statement
+    fn parse_use(&mut self) -> Result<Statement, ParseError> {
+        self.advance(); // consume 'use'
+        let path = self.parse_use_path()?;
+        self.consume(&TokenKind::Semicolon)?;
+        Ok(Statement::Use { path })
+    }
+
+    /// Parses a use path (e.g., normal::mode or experimental::features)
+    fn parse_use_path(&mut self) -> Result<String, ParseError> {
+        let mut path = Vec::new();
+        loop {
+            match self.advance() {
+                Some(token) if token.kind == TokenKind::Identifier => {
+                    path.push(token.text);
+                },
+                _ => return Err(ParseError::UnexpectedToken(self.previous().unwrap())),
+            }
+
+            if self.peek().map(|t| &t.kind) != Some(&TokenKind::DoubleColon) {
+                break;
+            }
+            self.advance(); // consume '::'
+        }
+        Ok(path.join("::"))
     }
 }
 

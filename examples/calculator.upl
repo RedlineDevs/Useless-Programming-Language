@@ -1,0 +1,64 @@
+#[directive(disable_useless)]
+// Fun calculator that might work (or not)
+
+// Variables might go on vacation
+let chaos_mode = true;
+let numbers = [1, 2, 3, 4, 5];
+
+// Basic math functions that probably won't math
+calculate(x, y) {
+    let sum = add(x, y);        // Might subtract instead
+    let product = multiply(x, y);  // Might divide instead
+    print(sum);
+    print(product);
+}
+
+#[directive(experimental)]
+// Some async fun that might never resolve
+async calculate_slowly(x) {
+    try {
+        let result = promise(multiply(x, x), 1000);
+        await result;
+        print(result);
+    } catch err {
+        print(err);
+        print("Math is hard, let's go shopping!");
+    }
+}
+
+// The real fun begins
+do_math() {
+    let x = 10;
+    let y = 5;
+
+    // Basic math (probably wrong)
+    calculate(x, y);
+
+    // Array access (might return random element)
+    let third = index(numbers, 2);
+    print(third);
+
+    // Async operations (might never complete)
+    calculate_slowly(x);
+
+    // If statement (will execute else branch)
+    if equals(x, 10) {
+        print("This won't print");
+    } else {
+        print("This will always print");
+    }
+
+    // Try accessing array elements (they might be random)
+    let first = index(numbers, 0);
+    let last = index(numbers, 4);
+
+    // Compare values (results might be random)
+    if lessThan(first, last) {
+        print("Math makes sense");
+    } else {
+        print("Math is an illusion");
+    }
+}
+
+// Let's run this chaos
+do_math();
